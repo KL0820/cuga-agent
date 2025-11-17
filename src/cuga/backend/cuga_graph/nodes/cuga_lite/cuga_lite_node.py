@@ -159,7 +159,7 @@ class CugaLiteNode(BaseNode):
         )
 
         # Check if execution failed (graph-level errors or code execution errors)
-        has_error = metrics.get('error') is not None
+        has_error = metrics is not None and metrics.get('error') is not None
 
         # Also check if the answer itself indicates an error
         if not has_error and answer:
@@ -169,7 +169,11 @@ class CugaLiteNode(BaseNode):
                 logger.warning(f"Detected error in answer content: {answer[:200]}...")
 
         if has_error:
-            error_msg = metrics.get('error', 'Code execution error detected in output')
+            error_msg = (
+                metrics.get('error', 'Code execution error detected in output')
+                if metrics
+                else 'Code execution error detected in output'
+            )
             logger.error(f"CugaLite execution failed with error: {error_msg}")
             logger.error(f"Full answer: {answer}")
 
@@ -248,9 +252,11 @@ class CugaLiteNode(BaseNode):
         logger.info(f"After execution, var_manager now has {var_manager.get_variable_count()} variables")
         logger.info(f"Variable names after execution: {var_manager.get_variable_names()}")
 
-        logger.info(f"CugaLite completed in {metrics.get('duration_seconds', 0)}s")
-        logger.info(f"Used {metrics.get('total_tokens', 0)} tokens")
-        logger.info(f"Steps: {metrics.get('step_count', 0)}, Tokens: {metrics.get('total_tokens', 0)}")
+        logger.info(f"CugaLite completed in {metrics.get('duration_seconds', 0) if metrics else 0}s")
+        logger.info(f"Used {metrics.get('total_tokens', 0) if metrics else 0} tokens")
+        logger.info(
+            f"Steps: {metrics.get('step_count', 0) if metrics else 0}, Tokens: {metrics.get('total_tokens', 0) if metrics else 0}"
+        )
 
         # Log Langfuse trace ID if available
         if self.agent and self.langfuse_handler:

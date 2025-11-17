@@ -59,11 +59,9 @@ class BaseAgent(ABC):
                 # Validate the dict against the schema
                 return schema(**output)
             return output
-        except ValidationError as e:
+        except (ValidationError, ValueError) as e:
             logger.error(f"Validation error: {e}")
-            # Log missing fields for debugging
-            missing_fields = [err['loc'][0] for err in e.errors() if err['type'] == 'missing']
-            logger.error(f"Missing required fields: {missing_fields}")
+            # Log missing fields for debugging if it's a ValidationError
             raise
 
     @staticmethod
@@ -86,12 +84,13 @@ class BaseAgent(ABC):
         # Create the base chain with structured output
         base_chain = prompt_template | llm.with_structured_output(schema, method="json_schema")
 
-        # Add validation and retry
+        # Add validation
         validated_chain = base_chain | RunnableLambda(
             lambda output: BaseAgent.validate_and_retry_output(output, schema)
         )
 
-        # Add retry logic
+        # Add retry logic to the entire validated chain
+        # When validation fails, the whole chain will retry (including the LLM call)
         validated_chain = validated_chain.with_retry(stop_after_attempt=3)
 
         return validated_chain
