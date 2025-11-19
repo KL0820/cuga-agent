@@ -108,6 +108,41 @@ async def get_apps() -> List[AppDefinition]:
             raise e
 
 
+async def count_total_tools() -> int:
+    """Count total number of tools across all apps.
+
+    Returns:
+        Total number of tools available
+    """
+    try:
+        # If registry is not enabled, count tracker tools
+        if not settings.advanced_features.registry:
+            total_count = 0
+            for server_name, tools_list in tracker.tools.items():
+                total_count += len(tools_list)
+            logger.debug(f"Total tracker tools count: {total_count}")
+            return total_count
+
+        # Otherwise, count tools from registry
+        apps = await get_apps()
+        total_count = 0
+
+        for app in apps:
+            try:
+                apis = await get_apis(app.name)
+                if apis:
+                    total_count += len(apis.keys())
+            except Exception as e:
+                logger.debug(f"Could not count tools for app {app.name}: {e}")
+                continue
+
+        logger.debug(f"Total registry tools count: {total_count}")
+        return total_count
+    except Exception as e:
+        logger.warning(f"Error counting total tools: {e}")
+        return 0
+
+
 def read_json_file(file_path):
     """
     Read and parse a JSON file from the specified path.

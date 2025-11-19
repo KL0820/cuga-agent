@@ -1,6 +1,11 @@
 import json
 from typing import Any, Dict, Optional
 from datetime import datetime
+from pathlib import Path
+import traceback
+import inspect
+from loguru import logger
+from cuga.config import settings
 
 
 class VariableMetadata:
@@ -27,15 +32,21 @@ class VariableMetadata:
         else:
             return 1
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(
+        self, include_value: bool = True, include_value_preview: bool = False, max_preview_length: int = 5000
+    ) -> Dict[str, Any]:
         """Convert metadata to dictionary representation."""
-        return {
-            "value": self.value,
+        result = {
             "description": self.description,
             "type": self.type,
             "created_at": self.created_at.isoformat(),
             "count_items": self.count_items,
         }
+        if include_value:
+            result["value"] = self.value
+        if include_value_preview:
+            result["value_preview"] = str(self.value)[:max_preview_length]
+        return result
 
 
 class VariablesManager(object):
@@ -43,11 +54,64 @@ class VariablesManager(object):
     variables: Dict[str, VariableMetadata] = {}
     variable_counter: int = 0
     _creation_order: list = []  # Track creation order
+    _log_file: Optional[Path] = None
+    _session_start: Optional[datetime] = None
 
     def __new__(cls, *args, **kwargs):
         if not cls._instance:
             cls._instance = super(VariablesManager, cls).__new__(cls)
+            if settings.advanced_features.tracker_enabled:
+                cls._instance._initialize_logging()
         return cls._instance
+
+    def _initialize_logging(self):
+        """Initialize the markdown log file."""
+        log_dir = Path("logging/variables_manager")
+        log_dir.mkdir(parents=True, exist_ok=True)
+
+        self._session_start = datetime.now()
+        timestamp = self._session_start.strftime("%Y%m%d_%H%M%S")
+        self._log_file = log_dir / f"variables_log_{timestamp}.md"
+
+        # Write header
+        with open(self._log_file, 'w') as f:
+            f.write("# Variables Manager Log\n\n")
+            f.write(f"**Session Started:** {self._session_start.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+            f.write("---\n\n")
+
+    def _get_caller_info(self, skip_frames=2) -> str:
+        """Get information about the caller function."""
+        try:
+            stack = inspect.stack()
+            if len(stack) > skip_frames:
+                frame = stack[skip_frames]
+                filename = Path(frame.filename).name
+                function = frame.function
+                line = frame.lineno
+                return f"{filename}:{function}:{line}"
+            return "Unknown caller"
+        except Exception:
+            return "Unknown caller"
+
+    def _log_operation(self, operation: str, details: str, extra_info: Optional[str] = None):
+        """Log an operation to the markdown file."""
+        if not settings.advanced_features.tracker_enabled or not self._log_file:
+            return
+
+        try:
+            timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+            caller = self._get_caller_info(skip_frames=3)
+
+            with open(self._log_file, 'a') as f:
+                f.write(f"## {operation}\n\n")
+                f.write(f"- **Time:** {timestamp}\n")
+                f.write(f"- **Caller:** `{caller}`\n")
+                f.write(f"- **Details:** {details}\n")
+                if extra_info:
+                    f.write(f"\n{extra_info}\n")
+                f.write("\n---\n\n")
+        except Exception as e:
+            logger.warning(f"Failed to write to variables log: {e}")
 
     def add_variable(self, value: Any, name: Optional[str] = None, description: Optional[str] = None) -> str:
         """
@@ -61,6 +125,9 @@ class VariablesManager(object):
         Returns:
             str: The name of the variable that was created
         """
+        is_new = True
+        original_name = name
+
         if name is None:
             self.variable_counter += 1
             name = f"variable_{self.variable_counter}"
@@ -72,11 +139,37 @@ class VariablesManager(object):
                 if num >= self.variable_counter:
                     self.variable_counter = num
 
+            # Check if variable already exists
+            if name in self.variables:
+                is_new = False
+
         self.variables[name] = VariableMetadata(value, description)
 
         # Track creation order
         if name not in self._creation_order:
             self._creation_order.append(name)
+
+        # Log the operation
+        operation = "➕ Variable Added" if is_new else "🔄 Variable Updated"
+        value_preview = self._get_value_preview(value, max_length=200)
+        details = f"**{name}** = `{type(value).__name__}` ({len(str(value))} chars)"
+
+        extra_info = f"""
+### Variable Info
+- **Name:** `{name}` {'(auto-generated)' if original_name is None else '(explicit)'}
+- **Type:** `{type(value).__name__}`
+- **Description:** {description or 'N/A'}
+- **Value Preview:**
+```python
+{value_preview}
+```
+
+### Current State
+- **Total Variables:** {len(self.variables)}
+- **Variable Counter:** {self.variable_counter}
+- **All Variables:** {', '.join(f'`{v}`' for v in self._creation_order)}
+"""
+        self._log_operation(operation, details, extra_info)
 
         return name
 
@@ -105,14 +198,23 @@ class VariablesManager(object):
         """
         return self.variables.get(name)
 
-    def get_all_variables_metadata(self) -> Dict[str, Dict[str, Any]]:
+    def get_all_variables_metadata(
+        self, include_value: bool = False, include_value_preview: bool = True
+    ) -> Dict[str, Dict[str, Any]]:
         """
         Get metadata for all variables including description, type, and item count.
+
+        Args:
+            include_value: Whether to include actual value in metadata (default: False)
+            include_value_preview: Whether to include value preview in metadata (default: True)
 
         Returns:
             Dict[str, Dict[str, Any]]: Dictionary with variable names as keys and metadata as values
         """
-        return {name: metadata.to_dict() for name, metadata in self.variables.items()}
+        return {
+            name: metadata.to_dict(include_value=include_value, include_value_preview=include_value_preview)
+            for name, metadata in self.variables.items()
+        }
 
     def get_variables_summary(
         self, variable_names: list[str] = None, last_n: Optional[int] = None, max_length: Optional[int] = 5000
@@ -517,12 +619,30 @@ class VariablesManager(object):
             bool: True if variable was removed, False if not found
         """
         if name in self.variables:
+            var_type = self.variables[name].type
+            var_value_preview = self._get_value_preview(self.variables[name].value, max_length=100)
+
             del self.variables[name]
             # Also remove from creation order
             if name in self._creation_order:
                 self._creation_order.remove(name)
+
+            details = f"Removed **{name}** (`{var_type}`)"
+            extra_info = f"""
+### Removed Variable
+- **Name:** `{name}`
+- **Type:** `{var_type}`
+- **Value Preview:** `{var_value_preview}`
+
+### Remaining State
+- **Total Variables:** {len(self.variables)}
+- **Variables:** {', '.join(f'`{v}`' for v in self._creation_order) if self._creation_order else 'None'}
+"""
+            self._log_operation("➖ Variable Removed", details, extra_info)
             return True
-        return False
+        else:
+            self._log_operation("⚠️ Remove Failed", f"Variable **{name}** not found", None)
+            return False
 
     def update_variable_description(self, name: str, description: str) -> bool:
         """
@@ -565,6 +685,24 @@ class VariablesManager(object):
         """
         Reset the variables manager, clearing all variables and counter.
         """
+        # Log before reset
+        variables_before = list(self._creation_order)
+        count_before = len(self.variables)
+
+        details = f"Clearing **{count_before}** variables"
+        extra_info = f"""
+### 🗑️ Reset Operation
+
+**Variables Cleared:**
+{chr(10).join(f'- `{name}`: {self.variables[name].type}' for name in variables_before) if variables_before else '- None'}
+
+### Stack Trace
+```python
+{''.join(traceback.format_stack()[:-1])}
+```
+"""
+        self._log_operation("🔄 RESET", details, extra_info)
+
         self.variables = {}
         self.variable_counter = 0
         self._creation_order = []
@@ -587,6 +725,7 @@ class VariablesManager(object):
 
         # Identify the last 'n' variables and their metadata
         names_to_keep = self._creation_order[-n:]
+        names_to_remove = [name for name in self._creation_order if name not in names_to_keep]
 
         for name in names_to_keep:
             if name in self.variables:
@@ -596,8 +735,27 @@ class VariablesManager(object):
                 if name.startswith("variable_") and name[9:].isdigit():
                     max_variable_counter = max(max_variable_counter, int(name[9:]))
 
-        # Perform the reset
-        self.reset()
+        details = f"Keeping last **{n}** variables, removing **{len(names_to_remove)}** variables"
+        extra_info = f"""
+### 🔄 Partial Reset (Keep Last {n})
+
+**Variables Kept:**
+{chr(10).join(f'- ✅ `{name}`: {self.variables[name].type}' for name in names_to_keep) if names_to_keep else '- None'}
+
+**Variables Removed:**
+{chr(10).join(f'- ❌ `{name}`: {self.variables[name].type}' for name in names_to_remove) if names_to_remove else '- None'}
+
+### Stack Trace
+```python
+{''.join(traceback.format_stack()[:-1])}
+```
+"""
+        self._log_operation("🔄 PARTIAL RESET", details, extra_info)
+
+        # Perform the reset (this will log again, but that's ok)
+        self.variables = {}
+        self.variable_counter = 0
+        self._creation_order = []
 
         # Re-add the identified variables
         for name in original_creation_order:

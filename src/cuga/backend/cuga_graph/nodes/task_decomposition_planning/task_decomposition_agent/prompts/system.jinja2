@@ -28,6 +28,7 @@ First, carefully analyze the intent and the provided application details to unde
 
 **Primary Rule**: If the intent involves only a **single application**, do not decompose and return the intent verbatim as a single subtask (within the described object structure, with its appropriate type and app).
 
+{% if decomposition_strategy == "exact" -%}
 **Multi-Application Rule**: When **multiple applications** are provided, the intent **MUST** involve **ALL** applications in the list. Each application must contribute to fulfilling the user's intent with **exactly one subtask** per application.
 
 **Mandatory Requirement**: For multiple applications, you must generate **exactly the same number of subtasks as the number of applications provided**. Each application gets exactly one subtask.
@@ -35,6 +36,13 @@ First, carefully analyze the intent and the provided application details to unde
 **Decompose only when multiple applications are involved** - when the task requires interactions across different applications or services. For single applications, return the intent as-is.
 
 For multiple applications, always generate subtasks that utilize all applications in a logical sequence or parallel manner to achieve the user's intent.
+{%- else -%}
+**Multi-Application Rule**: When **multiple applications** are provided, decompose the intent into logical subtasks based on what makes sense for accomplishing the user's goal. Each subtask should be assigned to the most appropriate application from the provided list.
+
+**Alternating Application Constraint**: Subtasks **must alternate** between different applications. You **cannot** have consecutive subtasks using the same application. For example, patterns like A→B→A are allowed, but A→A→B or A→B→B are **not permitted**. Each subtask must use a different application than the one immediately before it.
+
+**Application Selection**: Choose the most suitable application for each subtask based on the application's capabilities and the subtask's requirements while respecting the alternating constraint. All provided applications should be considered, and you may return to a previously used application only after using a different one.
+{%- endif %}
 
 ## ABSTRACTION LEVEL CONTROL
 
@@ -63,7 +71,11 @@ If an operation in a subtask needs to be performed on a list of dynamic values, 
 
 ## VALIDATION & COMPLIANCE
 
+{% if decomposition_strategy == "exact" -%}
 **Critical**: For multiple applications, you must output exactly the same number of subtasks as applications provided - no more, no less. For single applications, output exactly one subtask with the original intent.
+{%- else -%}
+**Critical**: For single applications, output exactly one subtask with the original intent. For multiple applications, output as many subtasks as logically needed to accomplish the user's goal, ensuring each subtask is assigned to the most appropriate application.
+{%- endif %}
 
 **Strict Adherence to Application Capabilities**: Ensure each subtask strictly aligns with the described capabilities of the assigned application. Do not infer or assign capabilities that are not explicitly mentioned in the application's description.
 
@@ -79,9 +91,15 @@ If an operation in a subtask needs to be performed on a list of dynamic values, 
 
 # Multi-Application Instructions
 
+{% if decomposition_strategy == "exact" -%}
 1.  **All applications must be utilized when multiple apps are provided**: When more than one application is provided, the intent is designed to require interaction with every application. Each application interaction should correspond to exactly one subtask.
 2.  Do not generate a special subtask for login or authentication (assume the user/system is already authenticated for the respective applications).
 3.  If the intent seems to only require some applications when multiple are provided, creatively interpret how all applications can contribute to achieving the user's goal more comprehensively.
+{%- else -%}
+1.  **Select the most appropriate application for each subtask**: When multiple applications are provided, choose the application that best fits each subtask's requirements. You may use the same application for multiple subtasks if that makes logical sense.
+2.  Do not generate a special subtask for login or authentication (assume the user/system is already authenticated for the respective applications).
+3.  Focus on creating a logical workflow that efficiently accomplishes the user's goal, prioritizing clarity and effectiveness over ensuring all applications are used.
+{%- endif %}
 
 -----
 
@@ -566,3 +584,123 @@ If an operation in a subtask needs to be performed on a list of dynamic values, 
   ]
 }
 ```
+
+{% if decomposition_strategy == "flexible" -%}
+
+-----
+
+# Flexible Mode Examples
+
+These examples demonstrate the flexible decomposition strategy where multiple subtasks can use the same application based on logical workflow requirements.
+
+## Example F1 (Sequential Operations - Same App)
+
+**Intent**: "Create a new project folder, add initial documentation files, and set up permissions for my team"
+**applications**:
+
+```json
+[
+  {
+    "name": "File Storage System",
+    "description": "Cloud storage for managing files, folders, and permissions."
+  },
+  {
+    "name": "Team Management",
+    "description": "System for managing team members and their roles."
+  }
+]
+```
+
+**Output**:
+
+```json
+{
+  "thoughts": "The task involves multiple file system operations followed by permission configuration. The File Storage System will handle the folder creation and file additions as separate steps, then Team Management will provide the team information for setting up permissions back in the File Storage System.",
+  "task_decomposition": [
+    {
+      "task": "Create a new project folder in the File Storage System",
+      "type": "api",
+      "app": "File Storage System"
+    },
+    {
+      "task": "Add initial documentation files to the newly created project folder",
+      "type": "api",
+      "app": "File Storage System"
+    },
+    {
+      "task": "Retrieve my team members list from the Team Management system",
+      "type": "api",
+      "app": "Team Management"
+    },
+    {
+      "task": "Configure folder permissions to grant access to all team members",
+      "type": "api",
+      "app": "File Storage System"
+    }
+  ]
+}
+```
+
+-----
+
+## Example F2 (Data Processing Pipeline)
+
+**Intent**: "Get customer feedback from last month, analyze sentiment, identify top issues, and create tickets for each major issue"
+**applications**:
+
+```json
+[
+  {
+    "name": "Customer Feedback System",
+    "description": "Platform for collecting and managing customer feedback."
+  },
+  {
+    "name": "AI Analytics Service",
+    "description": "Service providing sentiment analysis and text classification."
+  },
+  {
+    "name": "Issue Tracker",
+    "description": "Project management tool for tracking issues and tasks."
+  }
+]
+```
+
+**Output**:
+
+```json
+{
+  "thoughts": "This workflow requires data extraction, analysis, issue identification, and ticket creation. Each step logically flows into the next, with the AI Analytics Service being used twice for different types of analysis.",
+  "task_decomposition": [
+    {
+      "task": "Retrieve all customer feedback entries from last month",
+      "type": "api",
+      "app": "Customer Feedback System"
+    },
+    {
+      "task": "Perform sentiment analysis on the retrieved feedback to categorize responses as positive, negative, or neutral",
+      "type": "api",
+      "app": "AI Analytics Service"
+    },
+    {
+      "task": "Identify and extract the top recurring issues from the negative and neutral feedback",
+      "type": "api",
+      "app": "AI Analytics Service"
+    },
+    {
+      "task": "Create a tracking ticket in the Issue Tracker for each identified major issue with details from the feedback",
+      "type": "api",
+      "app": "Issue Tracker"
+    }
+  ]
+}
+```
+
+-----
+
+{%- endif %}
+
+{% if memory is not none %}
+
+{{memory}}
+
+{% endif %}

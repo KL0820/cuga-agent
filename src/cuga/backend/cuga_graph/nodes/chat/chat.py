@@ -149,18 +149,18 @@ class ChatNode(BaseNode):
 
         # Process chat input
         state.sender = name
-        state.chat_messages.append(HumanMessage(content=state.input))
-        res: BaseMessage = await agent.invoke(state.chat_messages)
-        state.chat_messages.append(res)
+        state.chat_agent_messages.append(HumanMessage(content=state.input))
+        res: BaseMessage = await agent.invoke(state.chat_agent_messages)
+        state.chat_agent_messages.append(res)
         # Handle tool calls - require human approval
         if ENABLE_SAVE_REUSE and res.tool_calls and res.tool_calls[0].get("name") == "run_new_flow":
-            state.final_answer = state.chat_messages[-1].content
+            state.final_answer = state.chat_agent_messages[-1].content
             state.sender = name
             state.hitl_action = create_new_flow_approve(tool=res.tool_calls[0])
             return Command(update=state.model_dump(), goto=NodeNames.SUGGEST_HUMAN_ACTIONS)
 
         if ENABLE_SAVE_REUSE and res.tool_calls:
-            state.final_answer = state.chat_messages[-1].content
+            state.final_answer = state.chat_agent_messages[-1].content
             state.sender = name
             state.hitl_action = create_flow_approve(tool=res.tool_calls[0])
             return Command(update=state.model_dump(), goto=NodeNames.SUGGEST_HUMAN_ACTIONS)
@@ -191,6 +191,6 @@ class ChatNode(BaseNode):
                 current_url=state.url,
             )
         )
-        state.final_answer = state.chat_messages[-1].content
+        state.final_answer = state.chat_agent_messages[-1].content
 
         return Command(update=state.model_dump(), goto=NodeNames.FINAL_ANSWER_AGENT)

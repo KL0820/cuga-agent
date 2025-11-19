@@ -520,17 +520,22 @@ class MCPManager:
                         "parameters": self._convert_mcp_parameters_to_openapi_format(
                             func.get('parameters', {})
                         ),
-                        "response_schemas": func.get(
-                            'outputSchema', ""
-                        ),  # MCP tools don't typically have response schemas defined
+                        "response_schemas": func.get('outputSchema', {}),
                     }
 
                     if include_response_schema:
-                        # Add empty response schema structure for consistency
-                        api_info["response_schemas"] = {
-                            "success": {"result": "string"},
-                            "failure": {"error": "string"},
-                        }
+                        output_schema = func.get('outputSchema', {})
+                        if output_schema:
+                            api_info["response_schemas"] = {
+                                "success": output_schema,
+                                "failure": {"type": "string"},
+                            }
+                        else:
+                            # Fallback to default if no output schema is defined
+                            api_info["response_schemas"] = {
+                                "success": {"string"},
+                                "failure": {"string"},
+                            }
 
                     result[tool_name] = api_info
 
@@ -543,11 +548,9 @@ class MCPManager:
 
     async def _initialize_fastmcp_client(self, mcp_servers: List[tuple]):
         """Initialize FastMCP client with all MCP servers using appropriate transport"""
-        if not FastMCPClient or not mcp_servers:
-            logger.error("FastMCP not available, using fallback")
-            if not FastMCPClient:
-                print("FastMCP not available, using fallback")
-                await self._fallback_mcp_connection(mcp_servers)
+        if not FastMCPClient:
+            raise Exception("FastMCP not available. Please install fastmcp package.")
+        if not mcp_servers:
             return
 
         try:
@@ -593,12 +596,15 @@ class MCPManager:
                         input_schema = tool.inputSchema if hasattr(tool, 'inputSchema') else {}
                         flattened_params = self._flatten_tool_parameters(input_schema)
 
+                        output_schema = tool.outputSchema if hasattr(tool, 'outputSchema') else {}
+
                         tool_dict = {
                             "type": "function",
                             "function": {
                                 "name": prefixed_name,
                                 "description": tool.description,
                                 "parameters": flattened_params,
+                                "outputSchema": output_schema,
                             },
                         }
                         self.tools_by_server[name].append(tool_dict)
@@ -619,9 +625,8 @@ class MCPManager:
                     raise
 
         except Exception as e:
-            print(f"Error initializing MCP servers: {e}")
-            print("Falling back to mock implementation")
-            await self._fallback_mcp_connection(mcp_servers)
+            logger.error(f"Error initializing MCP servers: {e}")
+            raise
 
     def _create_transport(self, name: str, config: ServiceConfig):
         """Create appropriate transport based on configuration"""
@@ -770,63 +775,6 @@ class MCPManager:
 
         return flattened
 
-    async def _fallback_mcp_connection(self, mcp_servers: List[tuple]):
-        """Fallback mock implementation when FastMCP is not available"""
-        print("Using fallback mock MCP implementation")
-
-        for name, config in mcp_servers:
-            try:
-                print(f"Mock connecting to MCP server {name} at {config.url}")
-
-                # Mock tools for demonstration
-                mock_tools = [
-                    {
-                        "name": "get_my_accounts",
-                        "description": "Get my territory accounts",
-                        "inputSchema": {"type": "object", "properties": {}, "required": []},
-                    },
-                    {
-                        "name": "get_accounts_tpp",
-                        "description": "Retrieve accounts from TPP",
-                        "inputSchema": {
-                            "type": "object",
-                            "properties": {
-                                "client_status": {"type": "string"},
-                                "coverage_id": {"type": "string"},
-                                "product_name": {"type": "string"},
-                            },
-                            "required": [],
-                        },
-                    },
-                ]
-
-                self.schemas[name] = {"tools": mock_tools}
-
-                # Register tools with server prefix and flatten parameters
-                for tool in mock_tools:
-                    prefixed_name = f"{name}_{tool['name']}"
-
-                    # Use OpenAPITransformer to flatten parameters
-                    input_schema = tool.get('inputSchema', {})
-                    flattened_params = self._flatten_tool_parameters(input_schema)
-
-                    tool_dict = {
-                        "type": "function",
-                        "function": {
-                            "name": prefixed_name,
-                            "description": tool.get('description', ''),
-                            "parameters": flattened_params,
-                        },
-                    }
-                    self.tools_by_server[name].append(tool_dict)
-                    self.server_by_tool[prefixed_name] = name
-
-                print(f"Mock connected to MCP server {name} with {len(mock_tools)} tools")
-                self.mcp_clients[name] = config.url
-
-            except Exception as e:
-                print(f"Error in fallback connection to MCP server {name}: {e}")
-
     async def _call_mcp_server_tool(self, server_name: str, tool_name: str, args: dict):
         """Call a tool on an external MCP server using FastMCP client with SSE transport"""
         try:
@@ -838,7 +786,17 @@ class MCPManager:
 
                 async with client:
                     result = await client.call_tool(original_tool_name, args)
-                    result_text = result.content[0].text if result.content else str(result)
+                    ##TODO add result.structured output if exists and retutn instead of text key  return [TextContent(text=result_text, type='text')]
+                    structured_content = (
+                        result.structured_content if hasattr(result, 'structured_content') else None
+                    )
+                    result_text = (
+                        structured_content
+                        if structured_content
+                        else (result.content[0].text if result.content else str(result))
+                    )
+                    if isinstance(result_text, dict):
+                        result_text = json.dumps(result_text)
                     return [TextContent(text=result_text, type='text')]
             else:
                 url = self.mcp_clients[server_name]
@@ -851,9 +809,31 @@ class MCPManager:
                     ) as response:
                         if response.status == 200:
                             result = await response.json()
-                            return [TextContent(text=str(result), type='text')]
+                            structured_content = result.get('structured_content', None)
+                            result_text = (
+                                structured_content
+                                if structured_content
+                                else (
+                                    result.get('content', [{}])[0].get('text', '')
+                                    if result.get('content')
+                                    else str(result)
+                                )
+                            )
+                            if isinstance(result_text, dict):
+                                result_text = json.dumps(result_text)
+                            return [TextContent(text=result_text, type='text')]
                         else:
                             error_msg = f"MCP server call failed with status {response.status}"
+                            structured_content = result.get('structured_content', None)
+                            result_text = (
+                                structured_content
+                                if structured_content
+                                else (
+                                    result.get('content', [{}])[0].get('text', '')
+                                    if result.get('content')
+                                    else str(result)
+                                )
+                            )
                             return [TextContent(text=error_msg, type='text')]
 
         except Exception as e:

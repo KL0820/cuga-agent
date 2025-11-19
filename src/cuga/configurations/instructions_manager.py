@@ -1,6 +1,5 @@
 from dynaconf import Dynaconf
 from pathlib import Path
-import threading
 from loguru import logger
 from cuga.backend.activity_tracker.tracker import ActivityTracker
 from cuga.backend.cuga_graph.utils.nodes_names import NodeNames
@@ -15,19 +14,16 @@ class InstructionsManager:
     """Singleton class for managing instructions configuration"""
 
     _instance = None
-    _lock = threading.Lock()
     _in_memory_cache = {}
 
-    def __new__(cls):
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = super(InstructionsManager, cls).__new__(cls)
-                    cls._instance._initialized = False
+    def __new__(cls, *args, **kwargs):
+        if not cls._instance:
+            cls._instance = super(InstructionsManager, cls).__new__(cls)
         return cls._instance
 
     def __init__(self):
-        if not self._initialized:
+        # Only initialize once
+        if not hasattr(self, '_initialized'):
             self._load_configuration()
             self._setup_key_mappings()
             self._log_initialization_summary()
@@ -209,7 +205,12 @@ class InstructionsManager:
             logger.warning(f"Key '{key}' not found in instructions or key mappings")
             return ""
 
-        if resolved_key in self._in_memory_cache:
+        # Check cache with both original and uppercase key
+        cache_key = resolved_key.upper() if resolved_key else None
+        if cache_key and cache_key in self._in_memory_cache:
+            logger.info(f"Loaded '{cache_key}' from in-memory cache.")
+            return self._in_memory_cache[cache_key]
+        elif resolved_key in self._in_memory_cache:
             logger.info(f"Loaded '{resolved_key}' from in-memory cache.")
             return self._in_memory_cache[resolved_key]
 
@@ -224,41 +225,49 @@ class InstructionsManager:
             else:
                 content = value
 
-            self._in_memory_cache[resolved_key] = content
+            # Store in cache with uppercase key for consistency
+            if cache_key:
+                self._in_memory_cache[cache_key] = content
             return content
         except Exception as e:
             logger.error(f"Error getting instructions for key '{key}': {e}")
             return ""
 
-    def set_instructions_from_one_file(self, instructions: str):
-        with self._lock:
-            res = parse_markdown_sections(instructions)
-            if res.personal_information:
-                tracker.pi = res.personal_information
-            if res.answer:
-                resolved_key = self._resolve_key('answer')
-                self._in_memory_cache[resolved_key] = res.answer
-            if res.plan:
-                resolved_key = self._resolve_key('api_planner')
-                self._in_memory_cache[resolved_key] = res.plan
+    def set_instructions_from_one_file(self, instructions: str | None = None):
+        if not instructions:
+            self._in_memory_cache.clear()
+            return
+
+        res = parse_markdown_sections(instructions)
+        if res.personal_information:
+            tracker.pi = res.personal_information
+        if res.answer:
+            resolved_key = self._resolve_key('answer')
+            # Normalize to uppercase to match get_all_instruction_keys() output
+            if resolved_key:
+                self._in_memory_cache[resolved_key.upper()] = res.answer
+        if res.plan:
+            resolved_key = self._resolve_key('api_planner')
+            # Normalize to uppercase to match get_all_instruction_keys() output
+            if resolved_key:
+                self._in_memory_cache[resolved_key.upper()] = res.plan
 
     def set_instruction(self, key_name: str, value: str):
         """
         Sets or updates an instruction in the in-memory cache.
         This will override any instruction loaded from configuration.
         """
-        with self._lock:
-            resolved_key = self._resolve_key(key_name)
-            if resolved_key is None:
-                # If key doesn't exist, we can't set it unless we add it to instructions.
-                # For this implementation, we will add it to the cache directly.
-                resolved_key = key_name
-                logger.warning(
-                    f"Key '{key_name}' not found in configuration. Adding to in-memory cache only."
-                )
+        resolved_key = self._resolve_key(key_name)
+        if resolved_key is None:
+            # If key doesn't exist, we can't set it unless we add it to instructions.
+            # For this implementation, we will add it to the cache directly.
+            resolved_key = key_name
+            logger.warning(f"Key '{key_name}' not found in configuration. Adding to in-memory cache only.")
 
-            self._in_memory_cache[resolved_key] = value
-            logger.info(f"Set instruction for key '{resolved_key}' in memory.")
+        # Use uppercase key for consistency
+        cache_key = resolved_key.upper() if resolved_key else resolved_key
+        self._in_memory_cache[cache_key] = value
+        logger.info(f"Set instruction for key '{cache_key}' in memory.")
 
     def get_all_instruction_keys(self):
         """Get all keys that have 'instructions' as a child"""
@@ -273,6 +282,39 @@ class InstructionsManager:
         direct_keys = self.get_all_instruction_keys()
         mapped_keys = list(self._key_mappings.keys())
         return {'direct_keys': direct_keys, 'mapped_keys': mapped_keys, 'all_keys': direct_keys + mapped_keys}
+
+    def get_all_instructions_formatted(self):
+        """Get all instructions formatted as markdown with key-value pairs"""
+        instruction_keys = self.get_all_instruction_keys()
+        if not instruction_keys:
+            logger.warning("No instruction keys found")
+            return None
+
+        markdown_sections = []
+        for key in sorted(instruction_keys):
+            instructions = self.get_instructions(key)
+            if instructions.strip():
+                # Format as nested bullet points under the key
+                formatted_key = key.replace('_', ' ').title()
+                # Format instructions content as nested bullets if multi-line
+                instruction_lines = instructions.strip().split('\n')
+                if len(instruction_lines) > 1:
+                    # Multi-line: format each line as nested bullet
+                    nested_content = '\n'.join(
+                        f"  - {line.strip()}" for line in instruction_lines if line.strip()
+                    )
+                    section = f"- **{formatted_key}**\n{nested_content}"
+                else:
+                    # Single line: simple format
+                    section = f"- **{formatted_key}**\n  - {instructions.strip()}"
+                markdown_sections.append(section)
+
+        # Return None if no sections were added (all values were empty)
+        if not markdown_sections:
+            logger.warning("No markdown sections found")
+            return None
+        logger.info(f"All instructions formatted: {markdown_sections}")
+        return "\n\n".join(markdown_sections)
 
     def get_key_mappings(self):
         """Get the current key mappings dictionary"""
@@ -300,12 +342,11 @@ class InstructionsManager:
 
     def reload_configuration(self):
         """Manually reload configuration if needed"""
-        with self._lock:
-            logger.info("🔄 Reloading instructions configuration...")
-            self._load_configuration()
-            self._setup_key_mappings()  # Reload mappings as well
-            self._log_initialization_summary()
-            logger.success("✅ Configuration reloaded successfully")
+        logger.info("🔄 Reloading instructions configuration...")
+        self._load_configuration()
+        self._setup_key_mappings()  # Reload mappings as well
+        self._log_initialization_summary()
+        logger.success("✅ Configuration reloaded successfully")
 
     @property
     def instructions_settings(self):
@@ -347,3 +388,8 @@ def get_all_available_keys():
 def add_key_mapping(alias, actual_key):
     """Add a new key mapping"""
     return get_instructions_manager().add_key_mapping(alias, actual_key)
+
+
+def get_all_instructions_formatted():
+    """Get all instructions formatted as markdown"""
+    return get_instructions_manager().get_all_instructions_formatted()

@@ -311,92 +311,93 @@ async def get_contacts(
 
 # --- Test Functions ---
 
+#
+# async def test_get_top_account():
+#     """Test case 1: Get top account by revenue from my accounts."""
+#     my_accounts_data = await get_my_accounts()
+#     my_accounts = my_accounts_data.accounts
+#
+#     if not my_accounts:
+#         print("No accounts found in my territory.")
+#         return
+#
+#     # Sort accounts by revenue in descending order and get the first one
+#     top_account = sorted(my_accounts, key=lambda acc: acc.revenue, reverse=True)[0]
+#
+#     print("\n--- Test 1: Top Account in My Territory by Revenue ---")
+#     print(f"Top Account: {top_account.name} (Revenue: ${top_account.revenue:,})")
+#     print("-" * 50)
+#
+#
+# async def test_get_tech_transformation_contacts():
+#     """Test case 2: Get 'Vice President of Sales' contacts for Tech Transformation campaign."""
+#     print("\n--- Test 2: 'VP of Sales' Contacts in 'Tech Transformation' Campaign ---")
+#
+#     # First, get third-party accounts for the "Tech Transformation" campaign
+#     third_party_accounts_output = await get_third_party_accounts(campaign_name="Tech Transformation")
+#     third_party_accounts = third_party_accounts_output.accounts
+#
+#     if not third_party_accounts:
+#         print("No third-party accounts found for the 'Tech Transformation' campaign.")
+#         return
+#
+#     # Now, get contacts for each of these accounts with the specific job title
+#     all_contacts = []
+#     for account in third_party_accounts:
+#         contacts_output = await get_contacts(account_id=account.id, job_title="Vice President of Sales")
+#         all_contacts.extend(contacts_output.contacts)
+#
+#     if all_contacts:
+#         print(f"Found {len(all_contacts)} contacts:")
+#         for contact in all_contacts:
+#             print(f"- {contact.name}, {contact.job_title} at {SAMPLE_ACCOUNTS[contact.account_id].name}")
+#     else:
+#         print("No 'Vice President of Sales' contacts found for the selected accounts.")
+#     print("-" * 50)
 
-async def test_get_top_account():
-    """Test case 1: Get top account by revenue from my accounts."""
-    my_accounts_data = await get_my_accounts()
-    my_accounts = my_accounts_data.accounts
-
-    if not my_accounts:
-        print("No accounts found in my territory.")
-        return
-
-    # Sort accounts by revenue in descending order and get the first one
-    top_account = sorted(my_accounts, key=lambda acc: acc.revenue, reverse=True)[0]
-
-    print("\n--- Test 1: Top Account in My Territory by Revenue ---")
-    print(f"Top Account: {top_account.name} (Revenue: ${top_account.revenue:,})")
-    print("-" * 50)
-
-
-async def test_get_tech_transformation_contacts():
-    """Test case 2: Get 'Vice President of Sales' contacts for Tech Transformation campaign."""
-    print("\n--- Test 2: 'VP of Sales' Contacts in 'Tech Transformation' Campaign ---")
-
-    # First, get third-party accounts for the "Tech Transformation" campaign
-    third_party_accounts_output = await get_third_party_accounts(campaign_name="Tech Transformation")
-    third_party_accounts = third_party_accounts_output.accounts
-
-    if not third_party_accounts:
-        print("No third-party accounts found for the 'Tech Transformation' campaign.")
-        return
-
-    # Now, get contacts for each of these accounts with the specific job title
-    all_contacts = []
-    for account in third_party_accounts:
-        contacts_output = await get_contacts(account_id=account.id, job_title="Vice President of Sales")
-        all_contacts.extend(contacts_output.contacts)
-
-    if all_contacts:
-        print(f"Found {len(all_contacts)} contacts:")
-        for contact in all_contacts:
-            print(f"- {contact.name}, {contact.job_title} at {SAMPLE_ACCOUNTS[contact.account_id].name}")
-    else:
-        print("No 'Vice President of Sales' contacts found for the selected accounts.")
-    print("-" * 50)
-
-
-async def test_get_my_accounts():
-    """Test case 3: Verify the 'my-accounts' endpoint behavior."""
-    print("\n--- Test 3: Verify 'my-accounts' Endpoint ---")
-
-    # Call the endpoint function
-    my_accounts_data = await get_my_accounts()
-    my_accounts = my_accounts_data.accounts
-
-    # Verify the response fields
-    print(f"Coverage ID: {my_accounts_data.coverage_id}")
-    print(f"Client Status: {my_accounts_data.client_status}")
-    print(f"Number of accounts found: {len(my_accounts)}")
-
-    # Verify expected values (based on the deterministic logic in the endpoint)
-    expected_count = 50
-    expected_coverage_id = "COV-001"
-    expected_client_status = "Active"
-
-    # Add a simple assertion-like check
-    if (
-        len(my_accounts) == expected_count
-        and my_accounts_data.coverage_id == expected_coverage_id
-        and my_accounts_data.client_status == expected_client_status
-    ):
-        print("Verification successful: All values match expectations.")
-    else:
-        print("Verification failed: Values do not match expectations.")
-
-    # Show a sample of the data to confirm it's not empty
-    if my_accounts:
-        print("\nExample of the first 6 accounts:")
-        for acc in my_accounts[:6]:
-            print(f" - {acc.name} (ID: {acc.id})")
-
-    print("-" * 50)
+#
+# async def test_get_my_accounts():
+#     """Test case 3: Verify the 'my-accounts' endpoint behavior."""
+#     print("\n--- Test 3: Verify 'my-accounts' Endpoint ---")
+#
+#     # Call the endpoint function
+#     my_accounts_data = await get_my_accounts()
+#     my_accounts = my_accounts_data.accounts
+#
+#     # Verify the response fields
+#     print(f"Coverage ID: {my_accounts_data.coverage_id}")
+#     print(f"Client Status: {my_accounts_data.client_status}")
+#     print(f"Number of accounts found: {len(my_accounts)}")
+#
+#     # Verify expected values (based on the deterministic logic in the endpoint)
+#     expected_count = 50
+#     expected_coverage_id = "COV-001"
+#     expected_client_status = "Active"
+#
+#     # Add a simple assertion-like check
+#     if (
+#         len(my_accounts) == expected_count
+#         and my_accounts_data.coverage_id == expected_coverage_id
+#         and my_accounts_data.client_status == expected_client_status
+#     ):
+#         print("Verification successful: All values match expectations.")
+#     else:
+#         print("Verification failed: Values do not match expectations.")
+#
+#     # Show a sample of the data to confirm it's not empty
+#     if my_accounts:
+#         print("\nExample of the first 6 accounts:")
+#         for acc in my_accounts[:6]:
+#             print(f" - {acc.name} (ID: {acc.id})")
+#
+#     print("-" * 50)
 
 
 # --- Main entry point ---
 if __name__ == "__main__":
-    import asyncio
+    import uvicorn
 
-    asyncio.run(test_get_top_account())
-    asyncio.run(test_get_tech_transformation_contacts())
-    asyncio.run(test_get_my_accounts())
+    uvicorn.run(app, host="0.0.0.0", port=8888)
+    # asyncio.run(test_get_top_account())
+    # asyncio.run(test_get_tech_transformation_contacts())
+    # asyncio.run(test_get_my_accounts())

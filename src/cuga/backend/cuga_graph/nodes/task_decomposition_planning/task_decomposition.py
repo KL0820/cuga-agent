@@ -50,6 +50,7 @@ class TaskDecompositionNode(BaseNode):
                 ],
             )
             state.task_decomposition = task_decomposition_plan
+            state.sub_tasks_progress = ["not-started"] * len(state.task_decomposition.task_decomposition)
             state.messages.append(AIMessage(content=task_decomposition_plan.model_dump_json()))
             return state
 
@@ -61,6 +62,9 @@ class TaskDecompositionNode(BaseNode):
             for k in state.task_decomposition.task_decomposition:
                 if k.type == "web":
                     k.type = "api"
+
+        state.sub_tasks_progress = ["not-started"] * len(state.task_decomposition.task_decomposition)
+
         logger.debug(state.task_decomposition.model_dump_json(indent=2))
         tracker.collect_step(step=Step(name=name, data=state.task_decomposition.model_dump_json()))
         return state

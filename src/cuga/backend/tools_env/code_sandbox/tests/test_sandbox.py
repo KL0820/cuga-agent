@@ -507,7 +507,7 @@ print("This won't be reached")
         assert isinstance(result, ExecutionResult)
         assert result.exit_code == 42
         assert "Before exit" in result.stdout
-        assert "SystemExit: 42" in result.stderr
+        assert "Generated Code called exit with code : 42" in result.stderr
 
     @pytest.mark.asyncio
     async def test_run_local_system_exit_without_code(self):
@@ -522,7 +522,7 @@ print("This won't be reached")
         assert isinstance(result, ExecutionResult)
         assert result.exit_code == 0
         assert "Before exit" in result.stdout
-        assert result.stderr == ""
+        assert "Generated Code called exit with code : 0" in result.stderr
 
     @pytest.mark.asyncio
     async def test_run_local_quit_function(self):
@@ -537,4 +537,4 @@ print("This won't be reached")
         assert isinstance(result, ExecutionResult)
         assert result.exit_code == 1
         assert "Before quit" in result.stdout
-        assert "SystemExit: 1" in result.stderr
+        assert "Generated Code called exit with code : 1" in result.stderr

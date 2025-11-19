@@ -8,16 +8,41 @@
 
 [![Python](https://shields.io/badge/Python-3.12-blue?logo=python&style=for-the-badge)](https://www.python.org/)
 [![Status](https://shields.io/badge/Status-Active-success?logo=checkmarx&style=for-the-badge)]()
-[![Documentation](https://shields.io/badge/Documentation-Coming%20Soon-orange?logo=gitbook&style=for-the-badge)]()
+[![Documentation](https://shields.io/badge/Documentation-Available-blue?logo=gitbook&style=for-the-badge)](https://docs.cuga.dev)
+[![Discord](https://shields.io/badge/Discord-Join-blue?logo=discord&style=for-the-badge)](https://discord.gg/aH6rAEEW)
 
 </div>
 
-**CUGA (ConfigUrable Generalist Agent)** is an open-source generalist agent framework from IBM Research, purpose-built for enterprise automation. Designed for developers, CUGA combines and improves the best of foundational agentic patterns such as ReAct, CodeAct, and Planner-Executor — into a modular architecture enabling trustworthy, policy-aware, and composable automation across web interfaces, APIs, and custom enterprise systems.
+> **📢 Recent Updates**
+>
+> - **Nov 11, 2025** — ⚡ **CugaLite Mode**: Experience fast execution for simple API tasks! CugaLite automatically activates when your app has fewer than 25 tools, delivering up to 3x faster performance while maintaining high accuracy. Perfect for streamlined workflows and quick API operations.
+>
+>   ```toml
+>   # Enable in ./src/cuga/settings.toml
+>   lite_mode = true
+>   lite_mode_tool_threshold = 25
+>   ```
+>
+> - **Oct 31, 2025** — 🎉 **Agent Trajectory Visualization**: Introducing `cuga viz` — a powerful web-based dashboard for visualizing and analyzing agent execution trajectories, decision-making processes, and tool usage patterns. Perfect for debugging, optimizing agent behavior, and understanding how CUGA reasons through complex tasks. [Learn more →](#-quick-start)
+> 
+>   ```bash
+>   cuga viz
+>   ```
+> 
+> - **Oct 27, 2025** — 🔧 **Enhanced MCP Tool Support**: Full support for all transport types of MCP tools with comprehensive examples, making it easier to integrate custom MCP servers and protocols.
+> 
+> - **Oct 22, 2025** — 📊 **Evaluation on Your Own Data**: Test CUGA against your own test cases and APIs with structured evaluation framework. Validate API responses, score keywords and tool calls, and generate detailed JSON and CSV reports. Perfect for validating CUGA's performance on your specific use cases. [Learn more →](#-evaluation)
+> 
+>   ```bash
+>   cuga evaluate <test_file_path>
+>   ```
+
+**CUGA (ConfigUrable Generalist Agent)** is an open-source generalist agent framework from IBM Research, purpose-built for enterprise automation. Designed for developers, CUGA combines and improves the best of foundational agentic patterns such as ReAct, CodeAct, and Planner-Executor — into a modular architecture enabling trustworthy, policy-aware, and composable automation across web interfaces, APIs, and custom enterprise systems.
 
 CUGA achieves state-of-the-art performance on leading benchmarks:
 
 - 🥇 #1 on [AppWorld](https://appworld.dev/leaderboard) — a benchmark with 750 real-world tasks across 457 APIs, and
-- 🥈 #2 on [WebArena](https://docs.google.com/spreadsheets/d/1M801lEpBbKSNwP-vDBkC_pF7LdyGU1f_ufZb_NWNBZQ/edit?gid=0#gid=0) — a complex benchmark for autonomous web agents across application domains.
+- 🥈 #3 on [WebArena](https://docs.google.com/spreadsheets/d/1M801lEpBbKSNwP-vDBkC_pF7LdyGU1f_ufZb_NWNBZQ/edit?gid=0#gid=0) — a complex benchmark for autonomous web agents across application domains.
 
 #### Key features
 
@@ -174,10 +199,17 @@ cuga start demo
 # Chrome will open automatically at https://localhost:8005
 # then try sending your task to CUGA: 'get top account by revenue from digital sales'
 
+# 5. View agent trajectories (optional)
+cuga viz
+
+# This launches a web-based dashboard for visualizing and analyzing
+# agent execution trajectories, decision-making, and tool usage
+
 ```
 
 <details>
 <summary>🤖 LLM Configuration - Advanced Options</summary>
+
 ---
 
 Refer to: [`.env.example`](.env.example) for detailed examples.
@@ -288,7 +320,17 @@ CUGA uses TOML configuration files located in `src/cuga/configurations/models/`:
 
 Each file contains agent-specific model settings that can be overridden by environment variables.
 
+
+// Start of Selection
+
 </details>
+
+<div style="margin: 20px 0; padding: 15px; border-left: 4px solid #2196F3; border-radius: 4px;">
+
+💡 **Tip:** Want to use your own tools or add your MCP tools? Check out [`src/cuga/backend/tools_env/registry/config/mcp_servers.yaml`](src/cuga/backend/tools_env/registry/config/mcp_servers.yaml) for examples of how to configure custom tools and APIs, including those for digital sales.
+
+</div>
+
 
 ## Configurations
 
@@ -440,6 +482,14 @@ Edit `configurations/instructions/instructions.toml`:
 [instructions]
 instruction_set = "default"  # or any instruction set above
 ```
+
+</details>
+
+<details>
+<summary><em style="color: #666;"> 📹 Optional: Run with memory</em></summary>
+
+1. Change `enable_memory = true` in `setting.toml`
+2. Run `cuga start memory`
 
 </details>
 

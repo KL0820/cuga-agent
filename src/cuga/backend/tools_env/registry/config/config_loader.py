@@ -1,12 +1,41 @@
 from typing import Dict, Optional, List, Any
 from pydantic import BaseModel
+from loguru import logger
 from cuga.backend.utils.consts import ServiceType
 from cuga.backend.utils.file_utils import read_yaml_file
 
 
 class Auth(BaseModel):
+    """
+    Authentication configuration supporting multiple auth types.
+
+    Supported types:
+    - 'header': Custom header authentication (e.g., X-API-Key)
+    - 'bearer': Bearer token authentication (Authorization: Bearer <token>)
+    - 'api-key': API key in query parameter
+    - 'basic': Basic authentication (Authorization: Basic <base64>)
+    - 'query': Custom query parameter authentication
+
+    Examples:
+        # Header auth
+        Auth(type='header', value='my-api-key', key='X-API-Key')
+
+        # Bearer token
+        Auth(type='bearer', value='my-token')
+
+        # API key in query
+        Auth(type='api-key', value='my-key', key='api_key')
+
+        # Basic auth
+        Auth(type='basic', value='username:password')
+
+        # Custom query param
+        Auth(type='query', value='my-value', key='auth_token')
+    """
+
     type: str
     value: Optional[str] = None
+    key: Optional[str] = None  # Header name or query param name
 
 
 class ApiOverride(BaseModel):
@@ -64,17 +93,19 @@ def load_service_configs(yaml_path: str) -> Dict[str, ServiceConfig]:
             # Handle new structure with both 'services' and 'mcpServers' keys
             if 'services' in data:
                 # Legacy services under 'services' key
-                for item in data['services']:
-                    for service_name, config in item.items():
-                        service_config = _create_service_config(service_name, config)
-                        services[service_name] = service_config
+                if data['services'] is not None:
+                    for item in data['services']:
+                        for service_name, config in item.items():
+                            service_config = _create_service_config(service_name, config)
+                            services[service_name] = service_config
 
             if 'mcpServers' in data:
-                # Standard MCP format
-                mcp_servers = data['mcpServers']
-                for service_name, config in mcp_servers.items():
-                    service_config = _create_service_config(service_name, config, is_mcp_server=True)
-                    services[service_name] = service_config
+                if data['mcpServers'] is not None:
+                    # Standard MCP format
+                    mcp_servers = data['mcpServers']
+                    for service_name, config in mcp_servers.items():
+                        service_config = _create_service_config(service_name, config, is_mcp_server=True)
+                        services[service_name] = service_config
         elif isinstance(data, list):
             # Pure legacy format (list at root)
             for item in data:
@@ -84,8 +115,11 @@ def load_service_configs(yaml_path: str) -> Dict[str, ServiceConfig]:
 
         return services
     except Exception as e:
-        print(f"Error loading service configurations: {e}")
-        return {}
+        logger.error(f"Failed to load service configurations from '{yaml_path}': {e}")
+        logger.error(
+            "Please ensure your YAML file is properly formatted with valid 'services' or 'mcpServers' structure"
+        )
+        raise ValueError(f"Invalid YAML configuration in '{yaml_path}': {e}")
 
 
 def _create_service_config(service_name: str, config: dict, is_mcp_server: bool = False) -> ServiceConfig:
@@ -94,7 +128,7 @@ def _create_service_config(service_name: str, config: dict, is_mcp_server: bool 
     auth_cfg = config.get('auth')
     auth = None
     if auth_cfg:
-        auth = Auth(type=auth_cfg['type'], value=auth_cfg.get('value'))
+        auth = Auth(type=auth_cfg['type'], value=auth_cfg.get('value'), key=auth_cfg.get('key'))
 
     # Auto-detect service type if not explicitly specified
     service_type = config.get('type')

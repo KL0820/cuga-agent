@@ -24,6 +24,15 @@ from cuga.config import get_app_name_from_url, settings, PACKAGE_ROOT
 from loguru import logger
 from langchain_core.messages import ToolCall
 
+try:
+    from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
+except ImportError:
+    try:
+        from langfuse.callback.langchain import LangchainCallbackHandler as LangfuseCallbackHandler
+    except ImportError:
+        logger.warning("Langfuse is not installed, LangfuseCallbackHandler will be None")
+        LangfuseCallbackHandler = None
+
 tracker = ActivityTracker()
 
 
@@ -168,9 +177,14 @@ class AgentRunner:
         state.sites = sites
         await self.browser_update_state(state)
         thread_id = "1"
+
         langfuse_handler = None
+        if settings.advanced_features.langfuse_tracing and LangfuseCallbackHandler is not None:
+            langfuse_handler = LangfuseCallbackHandler()
+            logger.debug("Langfuse tracing enabled for agent loop")
+
         agent_loop_obj = AgentLoop(
-            thread_id=thread_id, langfuse_handler=None, graph=agent.graph, env_pointer=self.env
+            thread_id=thread_id, langfuse_handler=langfuse_handler, graph=agent.graph, env_pointer=self.env
         )
         state.current_datetime = current_datetime if current_datetime else datetime.datetime.now().isoformat()
         state.pi = tracker.pi
@@ -261,9 +275,14 @@ class AgentRunner:
         state.sites = sites
         await self.browser_update_state(state)
         thread_id = "1"
+
         langfuse_handler = None
+        if settings.advanced_features.langfuse_tracing and LangfuseCallbackHandler is not None:
+            langfuse_handler = LangfuseCallbackHandler()
+            logger.debug("Langfuse tracing enabled for agent loop")
+
         agent_loop_obj = AgentLoop(
-            thread_id=thread_id, langfuse_handler=None, graph=agent.graph, env_pointer=self.env
+            thread_id=thread_id, langfuse_handler=langfuse_handler, graph=agent.graph, env_pointer=self.env
         )
         state.current_datetime = current_datetime if current_datetime else datetime.datetime.now().isoformat()
         state.pi = tracker.pi

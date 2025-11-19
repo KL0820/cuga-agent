@@ -43,6 +43,7 @@ from cuga.backend.cuga_graph.nodes.task_decomposition_planning.task_analyzer_age
 from cuga.backend.cuga_graph.nodes.task_decomposition_planning.task_decomposition_agent.task_decomposition_agent import (
     TaskDecompositionAgent,
 )
+from cuga.backend.cuga_graph.nodes.cuga_lite.cuga_lite_node import CugaLiteNode
 
 
 class DynamicAgentGraph:
@@ -63,6 +64,7 @@ class DynamicAgentGraph:
         self.api_planner = ApiPlanner(APIPlannerAgent.create())
         self.api_shortlister = ApiShortlister(ShortlisterAgent.create())
         self.api_coder = ApiCoder(CodeAgent.create())
+        self.cuga_lite = CugaLiteNode()
         self.graph = None
 
     async def build_graph(self):
@@ -98,6 +100,7 @@ class DynamicAgentGraph:
         graph.add_node(self.api_shortlister.agent.name, self.api_shortlister.node)
         graph.add_node(self.api_coder.agent.name, self.api_coder.node)
         graph.add_node(self.api_planner.agent.name, self.api_planner.node)
+        graph.add_node(self.cuga_lite.name, self.cuga_lite.node)
 
     def add_edges(self, graph):
         graph.add_edge(START, self.chat.chat_agent.name)
@@ -109,3 +112,5 @@ class DynamicAgentGraph:
         graph.add_edge(self.qa.qa_agent.name, self.planner.browser_planner_agent.name)
         graph.add_edge(self.final_answer_agent.final_answer_agent.name, END)
         graph.add_edge(self.action_agent.action_agent.name, self.planner.browser_planner_agent.name)
+        # CugaLite edge - goes directly to FinalAnswerAgent on success
+        # (CugaLite node handles fallback internally if it fails)

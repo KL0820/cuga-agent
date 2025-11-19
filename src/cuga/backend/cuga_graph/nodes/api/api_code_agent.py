@@ -14,9 +14,15 @@ from langgraph.types import Command
 from cuga.backend.cuga_graph.nodes.api.variables_manager.manager import VariablesManager
 from cuga.backend.llm.models import LLMManager
 
+from cuga.config import settings
+
 var_manager = VariablesManager()
 tracker = ActivityTracker()
 llm_manager = LLMManager()
+if settings.advanced_features.enable_fact:
+    from cuga.backend.memory.memory import Memory
+
+    memory = Memory()
 
 
 class ApiCoder(BaseNode):
@@ -38,7 +44,6 @@ class ApiCoder(BaseNode):
         res = await agent.run(state)
         tracker.reload_steps(tracker.task_id)
         res_obj = CodeAgentOutput(**json.loads(res.content))
-        state.previous_steps_api.append(res_obj.summary)
         res_obj.steps_summary.extend([res_obj.summary])
         state.api_planner_history[-1].agent_output = CoderAgentHistoricalOutput(
             variables_summary=var_manager.get_variables_summary(
@@ -51,4 +56,10 @@ class ApiCoder(BaseNode):
         msg = AIMessage(content=res_obj.model_dump_json())
         state.messages.append(msg)
         state.sender = name
+        if res_obj.variables and settings.advanced_features.enable_fact:
+            variables_string = json.dumps(res_obj.variables)
+            memory.create_and_store_fact(
+                namespace_id="memory", content=variables_string, metadata={"user_id": state.user_id}
+            )
+
         return Command(update=state.model_dump(), goto="APIPlannerAgent")

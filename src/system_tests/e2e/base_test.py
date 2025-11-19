@@ -83,6 +83,36 @@ class BaseTestServerStream(unittest.IsolatedAsyncioTestCase):
 
         return killed_any
 
+    async def wait_for_server(self, port: int, max_retries: int = 120, retry_interval: float = 0.5):
+        """
+        Wait for a server to be ready by pinging its health endpoint.
+
+        Args:
+            port: The port number the server is running on
+            max_retries: Maximum number of retry attempts (default: 120)
+            retry_interval: Time in seconds between retries (default: 0.5)
+
+        Raises:
+            TimeoutError: If the server doesn't become ready within max_retries attempts
+        """
+        url = f"http://127.0.0.1:{port}/"
+
+        for attempt in range(max_retries):
+            try:
+                async with httpx.AsyncClient(timeout=1.0) as client:
+                    response = await client.get(url)
+                    if response.status_code == 200:
+                        print(f"Server on port {port} is ready!")
+                        return
+            except (httpx.ConnectError, httpx.TimeoutException, httpx.RequestError):
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(retry_interval)
+                else:
+                    raise TimeoutError(
+                        f"Server did not become ready after {max_retries * retry_interval:.1f} seconds. "
+                        f"Please check if the server started correctly on port {port}."
+                    )
+
     def _create_log_files(self):
         """Create log files for demo and registry processes per test method in separate folders."""
         # Create logs directory within e2e folder
@@ -174,7 +204,6 @@ class BaseTestServerStream(unittest.IsolatedAsyncioTestCase):
             env=os.environ.copy(),  # Pass the updated environment
             preexec_fn=os.setsid,  # For proper process group management
         )
-        await asyncio.sleep(3)
         print("Starting registry process...")
         self.registry_process = subprocess.Popen(
             REGISTRY_COMMAND,
@@ -198,8 +227,9 @@ class BaseTestServerStream(unittest.IsolatedAsyncioTestCase):
         print(f"Demo server process started with PID: {self.demo_process.pid}")
 
         # Give processes some time to start up
-        print("Waiting for servers to initialize (20 seconds)...")
-        await asyncio.sleep(20)
+        print("Waiting for servers to initialize...")
+        await self.wait_for_server(settings.server_ports.registry)
+        await self.wait_for_server(settings.server_ports.demo)
         print("Server initialization wait complete.")
         print("--- Test environment setup complete ---")
 

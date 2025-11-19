@@ -203,9 +203,6 @@ class CodeAgent(BaseAgent):
             value=out.get("value"),
         )
 
-        if not input_variables.variables_memory:
-            input_variables.variables_memory = {}
-
         final_answer = None
         if settings.features.code_output_summary:
             final_answer = await self.summary_task.ainvoke(

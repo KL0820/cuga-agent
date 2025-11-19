@@ -29,6 +29,7 @@ async def run_api_task(task: str) -> str:
     return task_result.answer
 
 
+@mcp.tool
 async def run_web_task(task: str, start_url: str) -> str:
     """
     Run a task using web mode only - browser automation with GUI interaction
@@ -42,7 +43,7 @@ async def run_web_task(task: str, start_url: str) -> str:
     os.environ["DYNA_CONF_ADVANCED_FEATURES__MODE"] = "web"
     cuga_agent = CugaAgent(browser_enabled=False)
     try:
-        await cuga_agent.initialize_freemode_env(start_url=start_url, browser_mode="browser_only")
+        await cuga_agent.initialize_freemode_env(start_url=start_url, interface_mode="browser_only")
         task_result: AgentResult = await cuga_agent.run_task_generic(eval_mode=False, goal=task)
     except Exception:
         if hasattr(cuga_agent, "env") and cuga_agent.env:
@@ -67,7 +68,7 @@ async def run_hybrid_task(task: str, start_url: str) -> str:
     os.environ["DYNA_CONF_ADVANCED_FEATURES__MODE"] = "hybrid"
     cuga_agent = CugaAgent(browser_enabled=False)
     try:
-        await cuga_agent.initialize_freemode_env(start_url=start_url, browser_mode="browser_only")
+        await cuga_agent.initialize_freemode_env(start_url=start_url, interface_mode="browser_only")
         task_result: AgentResult = await cuga_agent.run_task_generic(eval_mode=False, goal=task)
     except Exception:
         if hasattr(cuga_agent, "env") and cuga_agent.env:

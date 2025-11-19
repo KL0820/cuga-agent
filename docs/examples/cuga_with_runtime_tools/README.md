@@ -12,6 +12,59 @@ This example shows how CUGA can seamlessly integrate multiple tool types in a si
 
 **Example Task**: *"Get top account by revenue from digital sales, send an email to the account owner, and save it to filesystem"*
 
+## 🔄 **Two Ways to Provide Tools to CUGA**
+
+CUGA supports two distinct approaches for tool integration, each suited for different use cases:
+
+### 1. **Registry-Based Tools** (Separate Process)
+Tools that run in the **MCP Registry**, a separate process triggered by CUGA:
+
+- **OpenAPI Tools** - REST APIs via OpenAPI specifications
+- **MCP Tools** - Model Context Protocol servers (stdio/http/sse)
+
+**When to Use:**
+- Shared tools across CUGA instances
+- Persistent external services/APIs
+- OpenAPI or MCP configuration in `mcp_servers.yaml`
+
+**How it Works:**
+```bash
+# Start registry as separate process
+uv run registry
+# CUGA connects to registry at runtime
+```
+
+### 2. **Runtime LangChain Tools** (In-Process)
+LangChain tools passed directly to CUGA at runtime:
+
+**When to Use:**
+- CUGA is a **component in another system** (embedded mode)
+- Dynamic tools that change based on application state
+- Custom Python functions specific to your application
+- Rapid prototyping without registry configuration
+- No need for the full registry process
+
+**How it Works:**
+```python
+from cuga.backend.cuga_graph.utils.controller import AgentRunner as CugaAgent
+from langchain_example_tool import tools as gmail_dummy_tools
+
+# Initialize CUGA agent
+cuga_agent = CugaAgent(browser_enabled=False)
+await cuga_agent.initialize_appworld_env()
+
+# Pass runtime tools directly to CUGA
+tools = gmail_dummy_tools
+for tool in tools:
+    tool.metadata = {'server_name': "gmail"}
+tracker.set_tools(tools)
+
+# Run task with runtime tools
+task_result = await cuga_agent.run_task_generic(eval_mode=False, goal=task)
+```
+
+**Key Advantage**: Ideal when CUGA is integrated into a larger system where you need to pass runtime tools without managing a separate registry process.
+
 ## 🔧 **Three Types of Tools in `mcp_servers.yaml`**
 
 ### 1. **OpenAPI Tools** (Direct API Integration)

@@ -16,6 +16,7 @@ import QaAgentComponent from "./qa_agent";
 import { FollowupAction } from "./Followup";
 import { fetchStreamingData } from "./StreamingWorkflow";
 import ToolCallFlowDisplay from "./ToolReview";
+import VariablesSidebar from "./VariablesSidebar";
 
 interface Step {
   id: string;
@@ -61,6 +62,14 @@ const CardManager: React.FC<CardManagerProps> = ({ chatInstance }) => {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isStopped, setIsStopped] = useState(false);
   const [viewMode, setViewMode] = useState<'inplace' | 'append'>('inplace');
+  const [globalVariables, setGlobalVariables] = useState<Record<string, any>>({});
+  const [variablesHistory, setVariablesHistory] = useState<Array<{
+    id: string;
+    title: string;
+    timestamp: number;
+    variables: Record<string, any>;
+  }>>([]);
+  const [selectedAnswerId, setSelectedAnswerId] = useState<string | null>(null);
   // Loader for next step within this card is derived from processing state
   const cardRef = useRef<HTMLDivElement>(null);
   const stepRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
@@ -204,6 +213,115 @@ const CardManager: React.FC<CardManagerProps> = ({ chatInstance }) => {
     };
   }, []);
 
+  // Extract variables from final answer steps and track by turn
+  useEffect(() => {
+    const newHistory: Array<{
+      id: string;
+      title: string;
+      timestamp: number;
+      variables: Record<string, any>;
+    }> = [];
+    
+    let turnNumber = 0;
+    
+    currentSteps.forEach((step) => {
+      // Only process Answer or FinalAnswerAgent steps
+      if (step.title !== "Answer" && step.title !== "FinalAnswerAgent") {
+        return;
+      }
+      
+      try {
+        let parsedContent: any;
+        let variables: Record<string, any> = {};
+        
+        if (typeof step.content === "string") {
+          try {
+            parsedContent = JSON.parse(step.content);
+            
+            // Check if we have variables in the parsed content
+            if (parsedContent.data !== undefined && parsedContent.variables) {
+              variables = parsedContent.variables;
+            } else if (parsedContent.variables) {
+              variables = parsedContent.variables;
+            }
+          } catch (e) {
+            // Not JSON, skip
+          }
+        } else if (step.content && typeof step.content === "object" && 'variables' in step.content) {
+          const contentWithVars = step.content as { variables?: Record<string, any> };
+          if (contentWithVars.variables) {
+            variables = contentWithVars.variables;
+          }
+        }
+        
+        // Only add to history if this step has variables
+        if (Object.keys(variables).length > 0) {
+          newHistory.push({
+            id: step.id,
+            title: `Turn ${turnNumber}`,
+            timestamp: step.timestamp,
+            variables: variables
+          });
+          turnNumber++;
+        }
+      } catch (e) {
+        // Skip this step
+      }
+    });
+    
+    // Update history only if it actually changed
+    setVariablesHistory(prev => {
+      // Check if history actually changed
+      if (prev.length !== newHistory.length) {
+        console.log('Variables history updated: length changed', prev.length, '->', newHistory.length);
+        return newHistory;
+      }
+      
+      // Check if any entries are different
+      const hasChanges = prev.some((entry, index) => {
+        const newEntry = newHistory[index];
+        return !newEntry || 
+               entry.id !== newEntry.id || 
+               JSON.stringify(entry.variables) !== JSON.stringify(newEntry.variables);
+      });
+      
+      if (hasChanges) {
+        console.log('Variables history updated: content changed');
+      }
+      
+      return hasChanges ? newHistory : prev;
+    });
+    
+    // Set selected answer to the most recent one if none selected or if current selection is gone
+    if (newHistory.length > 0) {
+      setSelectedAnswerId(prev => {
+        if (!prev || !newHistory.find(e => e.id === prev)) {
+          console.log('Auto-selecting most recent turn:', newHistory[newHistory.length - 1].title);
+          return newHistory[newHistory.length - 1].id;
+        }
+        return prev;
+      });
+    } else {
+      // No history, clear selection
+      setSelectedAnswerId(null);
+    }
+  }, [currentSteps]);
+  
+  // Update globalVariables based on selected answer
+  useEffect(() => {
+    if (selectedAnswerId) {
+      const selected = variablesHistory.find(e => e.id === selectedAnswerId);
+      if (selected) {
+        setGlobalVariables(selected.variables);
+      }
+    } else if (variablesHistory.length > 0) {
+      // Default to most recent
+      setGlobalVariables(variablesHistory[variablesHistory.length - 1].variables);
+    } else {
+      setGlobalVariables({});
+    }
+  }, [selectedAnswerId, variablesHistory]);
+
   // Function to generate natural language descriptions for each case
   const getCaseDescription = (stepTitle: string, parsedContent: any) => {
     switch (stepTitle) {
@@ -306,13 +424,43 @@ const CardManager: React.FC<CardManagerProps> = ({ chatInstance }) => {
   // Memoized function to render the appropriate component based on step title and content
   const renderStepContent = useCallback((step: Step) => {
     try {
-      let parsedContent;
+      let parsedContent: any;
 
       if (typeof step.content === "string") {
         try {
           parsedContent = JSON.parse(step.content);
           const keys = Object.keys(parsedContent);
-          if (keys.length === 1 && keys[0] === "data") {
+          
+          console.log(`[${step.title}] Raw parsed content:`, parsedContent);
+          console.log(`[${step.title}] Has data:`, parsedContent.data !== undefined);
+          console.log(`[${step.title}] Has variables:`, !!parsedContent.variables);
+          
+          // Check if we have variables in the parsed content
+          if (parsedContent.data !== undefined && parsedContent.variables) {
+            console.log(`[${step.title}] Processing with variables...`);
+            
+            // For Answer step with variables: treat data as final_answer
+            if (step.title === "Answer" || step.title === "FinalAnswerAgent") {
+              parsedContent = {
+                final_answer: parsedContent.data,
+                variables: parsedContent.variables
+              };
+              console.log(`[${step.title}] Converted to final_answer format:`, parsedContent);
+            } else if (typeof parsedContent.data === "object" && !Array.isArray(parsedContent.data)) {
+              // Keep both data and variables if data is an object
+              parsedContent = {
+                ...parsedContent.data,
+                variables: parsedContent.variables
+              };
+            } else {
+              // If data is not an object, keep as is with variables
+              parsedContent = {
+                data: parsedContent.data,
+                variables: parsedContent.variables
+              };
+            }
+          } else if (keys.length === 1 && keys[0] === "data") {
+            // Only data, no variables
             const data = parsedContent.data;
             parsedContent = data;
           }
@@ -383,18 +531,27 @@ const CardManager: React.FC<CardManagerProps> = ({ chatInstance }) => {
             mainElement = <QaAgentComponent qaData={parsedContent} />;
           }
           break;
+        case "Answer":
         case "FinalAnswerAgent":
-          if (parsedContent && parsedContent.final_answer) {
-            mainElement = (
-              <div
-                style={{
-                  fontSize: "14px",
-                  lineHeight: "1.6",
-                  color: "#1e293b"
-                }}
-                dangerouslySetInnerHTML={{ __html: marked(parsedContent.final_answer) }}
-              />
-            );
+          if (parsedContent) {
+            // Handle both cases: final_answer field or just a string content
+            const answerText = parsedContent.final_answer || (typeof parsedContent === 'string' ? parsedContent : null);
+            
+            console.log('Answer/FinalAnswerAgent - parsedContent:', parsedContent);
+            console.log('Answer/FinalAnswerAgent - answerText:', answerText);
+            
+            if (answerText) {
+              mainElement = (
+                <div
+                  style={{
+                    fontSize: "14px",
+                    lineHeight: "1.6",
+                    color: "#1e293b"
+                  }}
+                  dangerouslySetInnerHTML={{ __html: marked(answerText) }}
+                />
+              );
+            }
           }
           break;
         case "SuggestHumanActions":
@@ -438,7 +595,7 @@ const CardManager: React.FC<CardManagerProps> = ({ chatInstance }) => {
       console.log(`Failed to parse JSON for step ${step.title}:`, error);
       return null;
     }
-  }, [chatInstance]);
+  }, [chatInstance, markStepCompleted]);
 
   // Memoized button click handler
   const handleToggleDetails = useCallback((stepId: string) => {
@@ -637,7 +794,20 @@ const CardManager: React.FC<CardManagerProps> = ({ chatInstance }) => {
   };
 
   return (
-    <div className="components-container" ref={cardRef}>
+    <>
+      {/* Global Variables Sidebar */}
+      <VariablesSidebar 
+        variables={globalVariables}
+        history={variablesHistory}
+        selectedAnswerId={selectedAnswerId}
+        onSelectAnswer={setSelectedAnswerId}
+      />
+      
+      {/* Main Content - sidebar overlays it when expanded */}
+      <div 
+        className="components-container" 
+        ref={cardRef}
+      >
       {/* View mode toggle */}
       {!isStopped && (
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "6px" }}>
@@ -1058,7 +1228,9 @@ const CardManager: React.FC<CardManagerProps> = ({ chatInstance }) => {
           </style>
         </div>
       )}
-    </div>
+
+      </div>
+    </>
   );
 };
 

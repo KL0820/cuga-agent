@@ -130,7 +130,13 @@ class PlanControllerNode(BaseNode):
         plan_controller_output = PlanControllerOutput(**json.loads(result.content))
         tracker.collect_step(step=Step(name=name, data=plan_controller_output.model_dump_json()))
         state.messages.append(result)
-        if plan_controller_output.conclude_task and not plan_controller_output.next_subtask:
+
+        state.sub_tasks_progress = plan_controller_output.subtasks_progress
+
+        if plan_controller_output.conclude_task or (
+            all(status == "completed" for status in plan_controller_output.subtasks_progress)
+            and plan_controller_output.next_subtask == ""
+        ):
             state.last_planner_answer = plan_controller_output.conclude_final_answer
             return Command(update=state.model_dump(), goto="FinalAnswerAgent")
         else:
@@ -148,16 +154,35 @@ class PlanControllerNode(BaseNode):
                     )
                 )
                 return Command(update=state.model_dump(), goto="InterruptToolNode")
+
             # Updates current sub task for UI, API Planners
             state.sub_task = plan_controller_output.next_subtask
             state.sub_task_app = plan_controller_output.next_subtask_app
             state.sub_task_type = plan_controller_output.next_subtask_type
             if plan_controller_output.next_subtask_type == "api":
+                # Clear chat agent messages when switching to API tasks
+                state.chat_messages = []
+                if not plan_controller_output.next_subtask_app:
+                    logger.error(
+                        f"PlanControllerAgent returned next_subtask_type='api' but next_subtask_app is empty. "
+                        f"This violates the output schema. next_subtask: {plan_controller_output.next_subtask}"
+                    )
+                    raise ValueError(
+                        "PlanControllerAgent must specify next_subtask_app when next_subtask_type is 'api'"
+                    )
                 state.api_intent_relevant_apps_current = [
                     app
                     for app in state.api_intent_relevant_apps
                     if app.name == plan_controller_output.next_subtask_app
                 ]
+                if not state.api_intent_relevant_apps_current:
+                    logger.error(
+                        f"No matching app found for next_subtask_app='{plan_controller_output.next_subtask_app}'. "
+                        f"Available apps: {[app.name for app in state.api_intent_relevant_apps]}"
+                    )
+                    raise ValueError(
+                        f"App '{plan_controller_output.next_subtask_app}' not found in api_intent_relevant_apps"
+                    )
                 state.api_shortlister_all_filtered_apis = {}
                 state.api_shortlister_all_filtered_apis[
                     state.api_intent_relevant_apps_current[0].name

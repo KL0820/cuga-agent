@@ -448,6 +448,46 @@ def get_operation_override_parameters(
     return parameters if parameters else None
 
 
+def apply_authentication(auth, headers: dict, query_params: dict):
+    """
+    Apply authentication configuration to headers or query parameters.
+
+    Args:
+        auth: Auth configuration object
+        headers: Dictionary of headers to modify
+        query_params: Dictionary of query parameters to modify
+    """
+    if not auth or not auth.value:
+        return
+
+    import base64
+
+    auth_type = auth.type.lower()
+
+    if auth_type == 'bearer':
+        headers['Authorization'] = f"Bearer {auth.value}"
+
+    elif auth_type == 'basic':
+        if ':' in auth.value:
+            encoded = base64.b64encode(auth.value.encode()).decode()
+            headers['Authorization'] = f"Basic {encoded}"
+        else:
+            logger.warning("Basic auth requires 'username:password' format in value")
+
+    elif auth_type == 'header':
+        if auth.key:
+            headers[auth.key] = auth.value
+        else:
+            logger.warning("Header auth requires 'key' field to specify header name")
+
+    elif auth_type == 'api-key' or auth_type == 'query':
+        key = auth.key or 'api_key'
+        query_params[key] = auth.value
+
+    else:
+        logger.warning(f"Unknown auth type: {auth_type}")
+
+
 def create_handler(api, model, base_url: str, name: str, schemas: Dict[str, ServiceConfig]):
     """
     Create a handler function for an API that processes parameters,
@@ -477,6 +517,12 @@ def create_handler(api, model, base_url: str, name: str, schemas: Dict[str, Serv
                 del headers['_tokens']
             path_params, query_params = extract_url_params(api, all_params)
             query_params.update(additional_query_params)
+
+            # Apply authentication from service config
+            service_config = schemas.get(name)
+            if service_config and service_config.auth:
+                apply_authentication(service_config.auth, headers, query_params)
+
             final_url = construct_final_url(base_url, api, path_params, query_params)
             body_params = extract_body_params(api, all_params)
             body_params.update(additional_body_params)

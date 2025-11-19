@@ -143,8 +143,9 @@ async def call_mcp_function(request: FunctionCallRequest, trajectory_path: Optio
     try:
         global mcp_manager
         apis = await registry.show_apis_for_app(request.app_name)
-        is_secure = apis[request.function_name].get("secure")
-        logger.debug("is_secure:", is_secure)
+        api_info = apis.get(request.function_name, {})
+        is_secure = api_info.get("secure", False)
+        logger.debug(f"is_secure: {is_secure}")
         if trajectory_path:
             settings.update({"ADVANCED_FEATURES": {"TRACKER_ENABLED": True}}, merge=True)
             tracker.collect_step_external(

@@ -2,13 +2,13 @@ import os
 
 # stdlib
 from importlib import import_module
+from pathlib import Path
 from sys import platform
 from urllib.parse import urlparse
-from pathlib import Path
 
 # third-party imports
 import dynaconf
-from dotenv import load_dotenv, find_dotenv
+from dotenv import find_dotenv, load_dotenv
 from dynaconf import Dynaconf, Validator
 from loguru import logger
 
@@ -16,24 +16,15 @@ from loguru import logger
 # Package root & path helper (must be defined BEFORE first use)
 # ---------------------------------------------------------------------------
 
-
-def get_project_root() -> Path:
-    root = Path(__file__).resolve()
-    while not (root / "pyproject.toml").exists():
-        if root.parent == root:
-            raise RuntimeError("Project root not found")
-        root = root.parent
-    return root
-
-
 # Get the package root from path_store
-PACKAGE_ROOT = Path(__file__).parent.resolve()
+PACKAGE_ROOT = Path(os.environ.get("CUGA_PACKAGE_ROOT", Path(__file__).parent.resolve()))
 LOGGING_DIR = os.environ.get("CUGA_LOGGING_DIR", os.path.join(PACKAGE_ROOT, "./logging"))
 TRAJECTORY_DATA_DIR = os.path.join(LOGGING_DIR, "trajectory_data")
 TRACES_DIR = os.path.join(LOGGING_DIR, "traces")
+# Databases directory (sibling to logging)
+DBS_DIR = os.environ.get("CUGA_DBS_DIR", os.path.join(PACKAGE_ROOT, "./dbs"))
 # Define all path variables at the top (with environment variable overrides)
 ENV_FILE_PATH = os.getenv("ENV_FILE_PATH") or os.path.join(PACKAGE_ROOT, "..", "..", ".env")
-PROJECT_ROOT = get_project_root()
 
 
 # Helper function to find config files with existence check
@@ -56,9 +47,10 @@ def _find_config_file(filename: str, env_var_name: str) -> str:
 
 SETTINGS_TOML_PATH = _find_config_file("settings.toml", "SETTINGS_TOML_PATH")
 EVAL_CONFIG_TOML_PATH = _find_config_file("eval_config.toml", "EVAL_CONFIG_TOML_PATH")
-CONFIGURATIONS_DIR = os.path.join(PACKAGE_ROOT, "configurations")
+CONFIGURATIONS_DIR = os.environ.get("CUGA_CONFIGURATIONS_DIR", os.path.join(PACKAGE_ROOT, "configurations"))
 MODELS_DIR = os.path.join(CONFIGURATIONS_DIR, "models")
 MODES_DIR = os.path.join(CONFIGURATIONS_DIR, "modes")
+MEMORY_DIR = os.path.join(CONFIGURATIONS_DIR, "memory")
 
 
 # from feature_flags import FeatureFlags as flags
@@ -128,7 +120,13 @@ validators = [
     Validator("advanced_features.langfuse_tracing", default=False),
     Validator("advanced_features.benchmark", default="default"),
     Validator("advanced_features.tracker_enabled", default=False),
+    Validator("advanced_features.lite_mode", default=False),
+    Validator("advanced_features.lite_mode_tool_threshold", default=15),
+    Validator("advanced_features.enable_memory", default=False),
+    Validator("advanced_features.enable_fact", default=False),
+    Validator("advanced_features.decomposition_strategy", default="flexible"),
     Validator("features.chat", default=True),
+    Validator("features.memory_provider", default="mem0"),
     Validator("playwright_args", default=[]),
 ]
 base_settings = Dynaconf(
@@ -157,6 +155,15 @@ modes_file_path = os.path.join(MODES_DIR, f"{base_settings.features.cuga_mode}.t
 logger.info(f"Models config path: {models_file_path}")
 logger.info(f"Mode config path:   {modes_file_path}")
 
+if base_settings.advanced_features.enable_memory:
+    memory_file_path = os.path.join(
+        MEMORY_DIR, f"memory_settings.{base_settings.features.memory_provider}.toml"
+    )
+    tips_extractor_file_path = os.path.join(MEMORY_DIR, "memory_settings.tips_extractor.toml")
+
+    logger.info(f"Memory config path:   {memory_file_path}")
+    logger.info(f"Memory tips extractor config path:   {tips_extractor_file_path}")
+
 # Fail fast with clear error if files are missing (helps especially on Windows)
 if os.getenv("CUGA_STRICT_CONFIG", "1") == "1":
     if not os.path.isfile(models_file_path):
@@ -168,15 +175,29 @@ if os.getenv("CUGA_STRICT_CONFIG", "1") == "1":
     if not os.path.isfile(modes_file_path):
         raise FileNotFoundError(f"Could not find mode configuration file: {modes_file_path}.")
 
+    if base_settings.advanced_features.enable_memory:
+        if not os.path.isfile(memory_file_path):
+            raise FileNotFoundError(f"Could not find memory configuration file: {memory_file_path}.")
+
+        if not os.path.isfile(tips_extractor_file_path):
+            raise FileNotFoundError(
+                f"Could not find tips extractor configuration file: {tips_extractor_file_path}."
+            )
+
+settings_files = [
+    SETTINGS_TOML_PATH,
+    ENV_FILE_PATH,
+    EVAL_CONFIG_TOML_PATH,
+    models_file_path,
+    modes_file_path,
+]
+
+if base_settings.advanced_features.enable_memory:
+    settings_files.extend([memory_file_path, tips_extractor_file_path])
+
 settings = Dynaconf(
     root_path=PACKAGE_ROOT,
-    settings_files=[
-        SETTINGS_TOML_PATH,
-        ENV_FILE_PATH,
-        EVAL_CONFIG_TOML_PATH,
-        models_file_path,
-        modes_file_path,
-    ],
+    settings_files=settings_files,
     validators=validators,
 )
 

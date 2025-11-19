@@ -2,8 +2,14 @@
 {% for item in stm_all_history %}
 {{ loop.index }}. {{ item['sub_task'] }}
 {% for step in item['steps'] %}
-    {{ loop.index }}. {{ step }}
+        {{ loop.index }}. {{ step }}
 {% endfor %}
+{% if item['final_answer'] %}
+        **Final Answer**: {{item['final_answer']}}
+{% else %}
+        **Final Answer**: no answer is returned
+{% endif %}
+
 {% endfor %}
 
 **Variables History**:
@@ -17,9 +23,12 @@
 {{input}}
 """
 
+**API Applications List**: {{api_applications_list}}
+
 **Subtasks**:
 {%- for item in task_decomposition %}
-{{ loop.index }}. {{ item }}
+{{ loop.index }}. **[{{ sub_tasks_progress[loop.index0] }}]** {{ item }}
 {%- endfor %}
+
 
 Current datetime: {{current_datetime}}

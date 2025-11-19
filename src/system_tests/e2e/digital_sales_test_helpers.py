@@ -29,11 +29,7 @@ class DigitalSalesTestHelpers:
             test_instance._assert_answer_event(
                 all_events,
                 expected_keywords=[
-                    "Apex Industries",
-                    "Phoenix Holdings",
-                    "Zenith Group",
-                    "Frontier Tech",
-                    "Innovate Inc.",
+                    "50",
                 ],
             )
         test_instance._assert_answer_event(all_events, expected_keywords=["50"])

@@ -15,6 +15,9 @@ import tempfile
 from cuga.backend.tools_env.registry.config.config_loader import load_service_configs
 from cuga.backend.tools_env.registry.mcp_manager.mcp_manager import MCPManager
 
+# MCP server URL for health check
+MCP_SERVER_URL = "https://digitalsales-mcp.19pc1vtv090u.us-east.codeengine.appdomain.cloud/sse"
+
 # Mixed configuration with both legacy and MCP servers
 MIXED_CONFIG = """# Mixed configuration with both legacy and MCP servers
 # Legacy services (maintained for backward compatibility)
@@ -26,9 +29,8 @@ services:
 # Standard MCP servers configuration
 mcpServers:
   digital_sales_mcp:
-    url: "http://127.0.0.1:8000/sse"
+    url: https://digitalsales-mcp.19pc1vtv090u.us-east.codeengine.appdomain.cloud/sse
     description: FastMCP example server for Digital Sales API integration (SSE-based)
-    type: mcp_server
 """
 
 

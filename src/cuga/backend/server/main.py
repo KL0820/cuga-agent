@@ -4,6 +4,7 @@ import platform
 import re
 import shutil
 import os
+import subprocess
 import uuid
 from contextlib import asynccontextmanager
 from typing import List, Dict, Any, Union, Optional
@@ -16,6 +17,7 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.messages import AIMessage
 from loguru import logger
+from cuga.backend.cuga_graph.nodes.api.variables_manager.manager import VariablesManager
 
 from cuga.backend.activity_tracker.tracker import ActivityTracker
 from cuga.cli import start_extension_browser_if_configured
@@ -43,7 +45,14 @@ from cuga.config import (
     LOGGING_DIR,
     TRACES_DIR,
 )
-from langfuse.langchain import CallbackHandler
+
+try:
+    from langfuse.langchain import CallbackHandler
+except ImportError:
+    try:
+        from langfuse.callback.langchain import LangchainCallbackHandler as CallbackHandler
+    except ImportError:
+        CallbackHandler = None
 from fastapi.responses import StreamingResponse, JSONResponse
 import json
 
@@ -72,7 +81,6 @@ except ImportError as e:
 # Moved to top of file
 
 # Path constants
-
 TRACE_LOG_PATH = os.path.join(TRACES_DIR, "trace.log")
 FRONTEND_DIST_DIR = os.path.join(PACKAGE_ROOT, "..", "frontend_workspaces", "frontend", "dist")
 EXTENSION_DIR = os.path.join(PACKAGE_ROOT, "..", "frontend_workspaces", "extension", "releases", "chrome-mv3")
@@ -250,12 +258,15 @@ async def lifespan(app: FastAPI):
         "yes",
         "on",
     ):
-        if platform.system() == 'Darwin':  # macOS
-            os.system(f'open {url}')
-        elif platform.system() == 'Windows':  # Windows
-            os.system(f'start {url}')
-        else:  # Linux
-            os.system(f'xdg-open {url}')
+        try:
+            if platform.system() == 'Darwin':  # macOS
+                subprocess.run(['open', url], check=False)
+            elif platform.system() == 'Windows':  # Windows
+                subprocess.run(['cmd', '/c', 'start', '', url], check=False, shell=False)
+            else:  # Linux
+                subprocess.run(['xdg-open', url], check=False)
+        except Exception as e:
+            logger.warning(f"Failed to open browser: {e}")
     yield
     logger.info("Application is shutting down...")
 
@@ -336,7 +347,11 @@ async def event_stream(query: str, api_mode=False, resume=None):
         await setup_page_info(app_state.state, app_state.env)
     app_state.tracker.task_id = 'demo'
 
-    langfuse_handler = CallbackHandler() if settings.advanced_features.langfuse_tracing else None
+    langfuse_handler = (
+        CallbackHandler()
+        if settings.advanced_features.langfuse_tracing and CallbackHandler is not None
+        else None
+    )
 
     # Print Langfuse trace ID if tracing is enabled
     if langfuse_handler and settings.advanced_features.langfuse_tracing:
@@ -399,11 +414,19 @@ async def event_stream(query: str, api_mode=False, resume=None):
                         )
                         logger.debug("!!!!!!!Task is done!!!!!!!")
 
+                        # Get variables metadata from var_manager
+                        from cuga.backend.cuga_graph.nodes.api.variables_manager.manager import (
+                            VariablesManager,
+                        )
+
+                        var_manager = VariablesManager()
+                        variables_metadata = var_manager.get_all_variables_metadata()
+
                         yield StreamEvent(
                             name="Answer",
                             data=event.answer
                             if settings.advanced_features.wxo_integration
-                            else json.dumps({"data": event.answer})
+                            else json.dumps({"data": event.answer, "variables": variables_metadata})
                             if event.answer
                             else "Done.",
                         ).format(app_state.output_format, thread_id=app_state.thread_id)
@@ -610,6 +633,10 @@ async def reset_agent_state():
         app_state.stop_agent = False
         app_state.thread_id = str(uuid.uuid4())
 
+        # Reset observation and info
+        app_state.obs = None
+        app_state.info = None
+
         # Reset the agent graph
         if app_state.agent:
             app_state.agent = DynamicAgentGraph(None)
@@ -619,6 +646,9 @@ async def reset_agent_state():
         if app_state.env:
             app_state.obs, app_state.info = await app_state.env.reset()
 
+        # Reset tracker experiment if enabled
+        var_manger = VariablesManager()
+        var_manger.reset()
         logger.info("Agent state reset successfully")
         return {"status": "success", "message": "Agent state reset successfully"}
     except Exception as e:

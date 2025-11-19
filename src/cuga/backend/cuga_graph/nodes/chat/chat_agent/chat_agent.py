@@ -13,6 +13,7 @@ from mcp.client.sse import sse_client
 from mcp import ClientSession
 
 from cuga.backend.cuga_graph.nodes.shared.base_agent import BaseAgent
+from cuga.backend.cuga_graph.nodes.cuga_lite.combined_tool_provider import CombinedToolProvider
 
 from cuga.backend.llm.models import LLMManager
 from cuga.backend.llm.utils.helpers import load_prompt_chat
@@ -79,13 +80,13 @@ class ChatAgent(BaseAgent):
         self._connection = None
         self.tools: Optional[List[BaseTool]] = None
         self.prompt_template = prompt_template
-        # Check environment variable to determine execution mode
         self.use_regular_chat = None
         self.llm = llm
         self.chain = None
         self.sse_available = None
         self.agent = None
-        self._is_setup = False  # Track setup state
+        self._is_setup = False
+        self.tool_provider = CombinedToolProvider()
 
     async def setup(self):
         """Initialize the connection and agent"""
@@ -275,10 +276,14 @@ class ChatAgent(BaseAgent):
         if not self.chain:
             raise RuntimeError("Chain not initialized for regular mode.")
 
+        apps = await self.tool_provider.get_apps()
+        apps_list = "\n".join([f"- {app.name}: {app.description or 'No description'}" for app in apps])
+
         res = await self.chain.ainvoke(
             {
                 "conversation": self.map_chat_messages(chat_messages),
                 "variables_history": var_manager.get_variables_summary(last_n=10),
+                "apps_list": apps_list or "No apps available",
             }
         )
         return res

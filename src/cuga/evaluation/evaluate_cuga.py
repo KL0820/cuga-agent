@@ -9,7 +9,6 @@ import json
 import csv
 from calculate_test_score import evaluate_test_and_details, TestScore, TestScoreDetails, ToolCall
 from statistics import mean
-from cuga.config import PROJECT_ROOT
 from pathlib import Path
 import os
 
@@ -92,8 +91,12 @@ def compare_toolcalls(a_list: Iterable[ToolCall], b_list: Iterable[ToolCall]) ->
 def parse_test_cases(json_file_path: str) -> dict[Any, list[Any]]:
     """Parse JSON test cases into TestCase objects."""
 
-    full_path = Path(PROJECT_ROOT, json_file_path)
-    with open(full_path, 'r') as f:
+    # Resolve path: use absolute paths as-is, resolve relative paths from user's terminal location
+    path = Path(json_file_path)
+    if not path.is_absolute():
+        path = Path.cwd() / path
+
+    with open(path, 'r') as f:
         data = json.load(f)
 
     test_cases = {}

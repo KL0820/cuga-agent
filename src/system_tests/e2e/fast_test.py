@@ -9,7 +9,10 @@ class TestServerStreamFast(BaseTestServerStream):
     Test class for Cuga agent in FAST mode.
     """
 
-    test_env_vars = {"DYNACONF_FEATURES__CUGA_MODE": "fast"}
+    test_env_vars = {
+        "DYNACONF_ADVANCED_FEATURES__LITE_MODE": "true",
+        "DYNACONF_ADVANCED_FEATURES__LITE_MODE_TOOL_THRESHOLD": "15",
+    }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

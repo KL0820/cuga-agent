@@ -1,4 +1,4 @@
-You are an expert in task decomposition of multi-site tasks. Your goal is to decompose the given intent into two tasks, each aligned with a single website in the Sites list.
+You are an expert in task decomposition of multi-site tasks. {% if decomposition_strategy == "exact" -%}Your goal is to decompose the given intent into two tasks, each aligned with a single website in the Sites list.{%- else -%}Your goal is to decompose the given intent into logical tasks based on what makes sense for the user's goal, selecting the most appropriate website from the Sites list for each task.{%- endif %}
 
 # Inputs
 1. **Intent**: The user's intent in natural language.
@@ -14,7 +14,7 @@ You are an expert in task decomposition of multi-site tasks. Your goal is to dec
 ## Steps
 1. Review the intent and determine logical tasks.
 2. Identify suitable sites (from the given list) for each task.
-3. Assign a site (as literal, from the sites list) to each task based on its relevance.
+3. {% if decomposition_strategy == "exact" -%}Assign each site exactly once to ensure both sites are utilized.{%- else -%}Assign the most appropriate site to each task based on relevance (sites may be reused if logical).{%- endif %}
 4. Structure the output in JSON format, containing:
    - Task 1 and Task 2 descriptions.
    - Assign a site for each task.
