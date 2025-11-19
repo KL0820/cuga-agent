@@ -39,6 +39,7 @@ experiments/outputs
 /evaluation/data/tasks/
 /evaluation/data/
 /build/
+/data/
 
 # Local dependencies
 vendor/

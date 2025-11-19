@@ -1,0 +1,2 @@
+app,index,test_name,keyword_score,tool_call_score,response_score,expected_keywords,missing_keywords,tool_call_mismatches,response_expected,response_actual
+digital-sales,0,test_get_top_account,1.0,1.0,0.4868,"[""Andromeda Inc."",""9,700,000""]",[],[],"**Top Account by Revenue** - **Name:** Andromeda Inc. - **Revenue:** $9,700,000","The client with the highest revenue is **Andromeda Inc.**, with a revenue of $9,700,000."

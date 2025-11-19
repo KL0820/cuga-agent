@@ -1,0 +1,51 @@
+#!/bin/bash
+# AppWorld 服務快速啟動腳本
+
+set -e
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "$SCRIPT_DIR"
+
+# 顏色定義
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
+echo "🚀 啟動 AppWorld 評估環境"
+echo "================================"
+
+# 檢查虛擬環境
+if [ ! -d ".venv" ]; then
+    echo -e "${RED}❌ 錯誤: 找不到虛擬環境 .venv${NC}"
+    echo "請先建立虛擬環境"
+    exit 1
+fi
+
+# 檢查 appworld 目錄
+if [ ! -d "appworld/data" ]; then
+    echo -e "${RED}❌ 錯誤: 找不到 appworld/data 目錄${NC}"
+    echo "請確認 AppWorld 資料已下載"
+    exit 1
+fi
+
+# 設定環境變數
+export APPWORLD_ROOT="$SCRIPT_DIR/appworld"
+echo -e "${GREEN}✅ APPWORLD_ROOT: $APPWORLD_ROOT${NC}"
+
+# 檢查任務數量
+TASK_COUNT=$(ls -1 "$APPWORLD_ROOT/data/tasks" | wc -l | tr -d ' ')
+echo -e "${GREEN}✅ 找到 $TASK_COUNT 個 AppWorld 任務${NC}"
+
+echo ""
+echo "================================"
+echo "啟動 AppWorld 服務..."
+echo "================================"
+echo ""
+echo -e "${YELLOW}提示: 按 Ctrl+C 停止服務${NC}"
+echo -e "${YELLOW}提示: 在另一個終端執行評估命令${NC}"
+echo ""
+
+# 啟動服務
+source .venv/bin/activate
+exec cuga start appworld

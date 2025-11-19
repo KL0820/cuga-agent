@@ -1,0 +1,16 @@
+#!/bin/bash
+# AppWorld 評估系統快捷腳本
+# 自動設定環境變數並使用 uv 執行（確保依賴正確）
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+export APPWORLD_ROOT="${SCRIPT_DIR}/appworld"
+
+# 檢查 APPWORLD_ROOT 是否存在
+if [ ! -d "$APPWORLD_ROOT" ]; then
+    echo "❌ 錯誤: 找不到 AppWorld 目錄"
+    echo "   路徑: $APPWORLD_ROOT"
+    exit 1
+fi
+
+# 使用 uv run 執行評估模組（自動管理依賴）
+exec uv run python -m cuga.evaluation.evaluate_appworld "$@"

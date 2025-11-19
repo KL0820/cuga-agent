@@ -527,7 +527,29 @@ Focused suites:
 
 ## 📊 Evaluation
 
-For information on how to evaluate, see the [CUGA Evaluation Documentation](src/cuga/evaluation/README.md)
+### CUGA Benchmarks
+For information on how to evaluate CUGA on standard benchmarks, see the [CUGA Evaluation Documentation](src/cuga/evaluation/README.md)
+
+### AppWorld Integration ⭐ NEW
+CUGA now provides built-in support for evaluating on [AppWorld](https://appworld.dev) — a benchmark with 732 real-world tasks across diverse APIs.
+
+**Quick Start:**
+```bash
+# List available AppWorld tasks
+./appworld-cli list-tasks --limit 5
+
+# Evaluate an answer on a specific task
+./appworld-cli evaluate-task <task_id> --answer '<your_answer>'
+
+# Batch evaluate multiple tasks
+./appworld-cli batch-evaluate --max-tasks 100 --output results.json
+```
+
+📖 **Documentation:**
+- [AppWorld Quick Start](./APPWORLD_QUICK_START.md) — 5-minute setup guide
+- [AppWorld Command Reference](./APPWORLD_QUICK_REFERENCE.md) — Quick reference card
+- [AppWorld Evaluation Guide](./APPWORLD_EVALUATION_GUIDE.md) — Complete API documentation
+- [AppWorld Status Report](./APPWORLD_STATUS_REPORT.md) — Integration status and verified results
 
 ## 📚 Resources
 

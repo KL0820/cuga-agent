@@ -351,15 +351,17 @@ class LLMManager:
             # Build ChatGoogleGenerativeAI parameters
 
             # Add API key if specified
-            # apikey_name = model_settings.get("apikey_name")
-            # if apikey_name:
-            #     google_params["api_key"] = os.environ.get(apikey_name)
+            apikey_name = model_settings.get("apikey_name")
+            if apikey_name:
+                google_api_key = os.environ.get(apikey_name)
+            else:
+                google_api_key = os.environ.get("GOOGLE_API_KEY")
 
             llm = ChatGoogleGenerativeAI(
-                api_key=os.environ.get("GOOGLE_API_kEY"),
+                api_key=google_api_key,
                 model=model_name,
                 temperature=temperature,
-                max_tokens=max_tokens,
+                max_tokens=max_tokens
             )
         else:
             raise ValueError(f"Unsupported platform: {platform}")

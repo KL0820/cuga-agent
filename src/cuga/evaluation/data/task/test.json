@@ -1,0 +1,22 @@
+[
+  {
+    "name": "digital-sales",
+    "test_cases": [
+      {
+        "name": "test_get_top_account",
+        "description": "獲取收入最高的客戶",
+        "intent": "告訴我我收入最高的客戶",
+        "expected_output": {
+          "response": "**Top Account by Revenue** - **Name:** Andromeda Inc. - **Revenue:** $9,700,000",
+          "keywords": ["Andromeda Inc.", "9,700,000"],
+          "tool_calls": [
+            {
+              "name": "digital_sales_get_my_accounts_my_accounts_get",
+              "args": {}
+            }
+          ]
+        }
+      }
+    ]
+  }
+]

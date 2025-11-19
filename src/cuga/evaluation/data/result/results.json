@@ -1,0 +1,30 @@
+[
+  {
+    "app": "digital-sales",
+    "index": 0,
+    "test_name": "test_get_top_account",
+    "score": {
+      "keyword_score": 1.0,
+      "tool_call_score": 1.0,
+      "response_score": 0.4868,
+      "response_scoring_type": "fuzzy_token_set"
+    },
+    "details": {
+      "missing_keywords": [],
+      "expected_keywords": [
+        "Andromeda Inc.",
+        "9,700,000"
+      ],
+      "expected_tool_calls": [
+        {
+          "name": "digital_sales_get_my_accounts_my_accounts_get",
+          "args": {}
+        }
+      ],
+      "tool_call_mismatches": [],
+      "response_expected": "**Top Account by Revenue** - **Name:** Andromeda Inc. - **Revenue:** $9,700,000",
+      "response_actual": "The client with the highest revenue is **Andromeda Inc.**, with a revenue of $9,700,000.",
+      "response_scoring_type": "fuzzy_token_set"
+    }
+  }
+]

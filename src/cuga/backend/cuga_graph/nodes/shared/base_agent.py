@@ -136,6 +136,13 @@ JSON schema:
         #     logger.debug("Rits model")
         #     parser = PydanticOutputParser(pydantic_object=schema)
         #     return prompt_template | llm.bind(extra_body={"guided_json": schema.model_json_schema()}) | parser
+        
+        # Check if it's Google Gemini model
+        if ChatGoogleGenerativeAI is not None and isinstance(llm, ChatGoogleGenerativeAI):
+            logger.debug("Getting model for Google Gemini - using default structured output method")
+            # Google Gemini doesn't support method='json_schema', use default method instead
+            return prompt_template | llm.with_structured_output(schema)
+        
         if isinstance(llm, ChatWatsonx):
             logger.debug("Loading LLM for watsonx")
             model_id = llm.model_id
