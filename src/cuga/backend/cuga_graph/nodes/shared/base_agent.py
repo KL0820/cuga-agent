@@ -173,6 +173,10 @@ JSON schema:
             return chain.with_retry(stop_after_attempt=3)
         elif isinstance(llm, ChatOpenAI) or (ChatGroq is not None and isinstance(llm, ChatGroq)):
             return BaseAgent.create_validated_structured_output_chain(llm, schema, prompt_template)
+        elif ChatGoogleGenerativeAI is not None and isinstance(llm, ChatGoogleGenerativeAI):
+            logger.debug("Loading LLM for Google Gemini")
+            chain = prompt_template | llm.with_structured_output(schema, method="json_schema")
+            return chain.with_retry(stop_after_attempt=3)
         else:
             logger.debug("Getting model for azure")
             return prompt_template | llm.with_structured_output(schema, method="json_schema")

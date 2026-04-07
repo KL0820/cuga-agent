@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 import time
 
 import pandas as pd
+from pydantic import field_validator
 
 
 from cuga.backend.cuga_graph.nodes.api.code_agent.model import CodeAgentOutput
@@ -59,6 +60,18 @@ class Step(BaseModel):
     observation_before: Optional[str] = ""
     image_before: Optional[str] = ""
 
+    @field_validator("data", mode="before")
+    @classmethod
+    def _coerce_data_to_str(cls, v: Any) -> Optional[str]:
+        if v is None or isinstance(v, str):
+            return v
+        if isinstance(v, (list, dict)):
+            try:
+                return json.dumps(v, ensure_ascii=False)
+            except Exception:
+                return str(v)
+        return str(v)
+
 
 class TasksMetadata(BaseModel):
     task_ids: List[str]
@@ -84,6 +97,8 @@ class ActivityTracker(object):
     task_id: str = "default"
     actions_count: int = 0
     token_usage: int = 0
+    llm_call_count: int = 0
+    node_events: List[Dict[str, Any]] = []
     steps: List[Step] = []
     images: List[str] = []
     score: float = 0.0
@@ -404,6 +419,8 @@ class ActivityTracker(object):
 
     def reset(self, intent, task_id="default"):
         self.token_usage = 0
+        self.llm_call_count = 0
+        self.node_events = []
         self.start_time = time.time()
         self.current_date = None
         self.pi = None
@@ -563,6 +580,14 @@ class ActivityTracker(object):
             count (int): The number of times the token is used.
         """
         self.token_usage += count
+
+    def collect_llm_call(self) -> None:
+        """Increment total LLM call counter."""
+        self.llm_call_count += 1
+
+    def collect_node_event(self, node_name: str, llm_calls: int) -> None:
+        """Record that a node made LLM calls (only called when llm_calls > 0)."""
+        self.node_events.append({"node": node_name, "llm_calls": llm_calls})
 
     def collect_image(self, img: str) -> None:
         if not img:

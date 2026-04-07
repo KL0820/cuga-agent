@@ -45,9 +45,48 @@ class TokenUsageTracker(AsyncCallbackHandler):
         self.tracker = tracker
 
     async def on_llm_end(self, response: LLMResult, **kwargs):
-        generation = response.generations[0][0].text
-        self.tracker.collect_prompt(role="assistant", value=generation)
-        self.tracker.collect_tokens_usage(response.llm_output.get("token_usage").get("total_tokens"))
+        try:
+            text = response.generations[0][0].text
+            if text:
+                self.tracker.collect_prompt(role="assistant", value=text)
+        except Exception:
+            pass
+        try:
+            usage: dict = {}
+            # 1. Standard LangChain llm_output
+            llm_out = response.llm_output or {}
+            usage = (
+                llm_out.get("token_usage")
+                or llm_out.get("usage_metadata")
+                or llm_out.get("usage")
+                or {}
+            )
+            # 2. Google GenAI: usage inside generation_info
+            if not usage:
+                try:
+                    gen_info = getattr(response.generations[0][0], "generation_info", None) or {}
+                    usage = gen_info.get("usage_metadata") or {}
+                except Exception:
+                    pass
+            # 3. LangChain chat model: AIMessage.usage_metadata
+            if not usage:
+                try:
+                    msg = getattr(response.generations[0][0], "message", None)
+                    if msg is not None:
+                        usage = getattr(msg, "usage_metadata", None) or {}
+                except Exception:
+                    pass
+            total = (
+                usage.get("total_tokens")
+                or usage.get("total_token_count")
+                or (usage.get("prompt_tokens", 0) + usage.get("completion_tokens", 0))
+                or (usage.get("prompt_token_count", 0) + usage.get("candidates_token_count", 0))
+                or 0
+            )
+            if total:
+                self.tracker.collect_tokens_usage(int(total))
+        except Exception:
+            pass
 
     def split_system_human(self, text):
         """
@@ -105,6 +144,7 @@ class TokenUsageTracker(AsyncCallbackHandler):
         metadata: Optional[dict[str, Any]] = None,
         **kwargs: Any,
     ) -> None:
+        self.tracker.collect_llm_call()
         pmt = prompts[0]
         result1 = self.split_system_human(pmt)
         if result1:
@@ -729,6 +769,7 @@ class AgentLoop:
         event_stream = self.get_stream(state, resume)
         event = {}
         session_tagged = False  # Track if we've set session.id yet
+        _llm_calls_before = getattr(self.tracker, "llm_call_count", 0)
 
         async for event in event_stream:
             # Tag session.id on the first event (when spans are active)
@@ -738,5 +779,21 @@ class AgentLoop:
 
             event_msg = self.get_event_message(event)
             await self.show_chat_even(event_msg)
-            # logger.debug(f"current event: {event_msg.format()}")
+
+            # Track per-node LLM call count
+            try:
+                _llm_calls_now = getattr(self.tracker, "llm_call_count", 0)
+                node_llm_calls = _llm_calls_now - _llm_calls_before
+                _llm_calls_before = _llm_calls_now
+
+                if node_llm_calls > 0:
+                    raw_event = event
+                    if isinstance(raw_event, tuple):
+                        _, raw_event = raw_event
+                    if isinstance(raw_event, dict) and raw_event:
+                        node_name = list(raw_event.keys())[0]
+                        self.tracker.collect_node_event(node_name, node_llm_calls)
+            except Exception:
+                pass
+
         return self.get_output(event)

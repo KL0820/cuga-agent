@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from langchain_core.messages import AIMessage, BaseMessage
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from loguru import logger
 
 from cuga.backend.cuga_graph.nodes.api.api_planner_agent.prompts.load_prompt import ApiDescription
@@ -915,6 +915,27 @@ class AnalyzeTaskAppsOutput(BaseModel):
 class AgentState(BaseModel):
     # pages: Annotated[Sequence[str], operator.add]  # List of pages traversed
     # page: Page  # The Playwright web page lets us interact with the web environment
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_list_to_str(cls, data: Any) -> Any:
+        """Gemini may return content-block lists where str fields are expected. Convert to JSON string."""
+        if not isinstance(data, dict):
+            return data
+        str_fields = {
+            name for name, info in cls.model_fields.items()
+            if info.annotation in (str, Optional[str])
+            or str(info.annotation) in ("str | None", "Optional[str]", "<class 'str'>")
+        }
+        for field_name in str_fields:
+            val = data.get(field_name)
+            if isinstance(val, (list, dict)):
+                try:
+                    data[field_name] = json.dumps(val, ensure_ascii=False)
+                except Exception:
+                    data[field_name] = str(val)
+        return data
+
     user_id: Optional[str] = "default"  # TODO: this should be updated in multi user scenario
     thread_id: Optional[str] = None  # Thread ID for multi-user isolation
     service_scope: Optional[Dict[str, str]] = Field(

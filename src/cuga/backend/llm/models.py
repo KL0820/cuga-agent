@@ -606,7 +606,8 @@ class LLMManager:
 
             llm = ChatGoogleGenerativeAI(
                 api_key=_normalize_secret(resolve_secret("GOOGLE_API_KEY"))
-                or os.environ.get("GOOGLE_API_KEY"),
+                or os.environ.get("GOOGLE_API_KEY")
+                or os.environ.get("GOOGLE_GENAI_API_KEY"),
                 model=model_name,
                 temperature=temperature,
                 max_tokens=max_tokens,

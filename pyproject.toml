@@ -44,6 +44,7 @@ dependencies = [
     "hvac>=2.0.0",
     "boto3>=1.34.0",
     "openlit>=1.40.1",
+    "langchain-google-genai>=4.2.0",
 ]
 
 [project.optional-dependencies]
@@ -131,7 +132,7 @@ registry_appworld = "scripts.commands:run_api_registry_appworld"
 
 graph = "scripts.draw_graph:main"
 eval_api = "scripts.commands:run_eval_api"
-appworld_eval = "evaluation.appworld_eval:run_main"
+appworld_eval = "cuga.evaluation.appworld_eval:run_main"
 appworld_setup = "scripts.commands:setup_appworld_environment"
 appworld_setup_docker = "scripts.commands:setup_appworld_environment_docker"
 cuga = "cuga.cli:app"
