@@ -18,6 +18,9 @@ from cuga.backend.cuga_graph.nodes.task_decomposition_planning.plan_controller_a
 from cuga.backend.cuga_graph.nodes.task_decomposition_planning.plan_controller_agent.prompts.load_prompt import (
     PlanControllerOutput,
 )
+from cuga.backend.cuga_graph.nodes.task_decomposition_planning.mode_constraints import (
+    validate_subtask_types_for_mode,
+)
 
 tracker = ActivityTracker()
 
@@ -48,6 +51,14 @@ class PlanControllerNode(BaseNode):
             PlanControllerNode.node_handler,
             agent=self.plan_controller_agent,
             name=self.plan_controller_agent.name,
+        )
+
+    @staticmethod
+    def assert_subtask_type_allowed(subtask_type: str | None):
+        validate_subtask_types_for_mode(
+            [subtask_type],
+            settings.advanced_features.mode,
+            context="PlanController router",
         )
 
     @staticmethod
@@ -152,6 +163,7 @@ class PlanControllerNode(BaseNode):
                         ).model_dump_json()
                     )
                 )
+                PlanControllerNode.assert_subtask_type_allowed(state.sub_task_type)
                 if state.sub_task_type == 'web':
                     return Command(update=state.model_dump(), goto="BrowserPlannerAgent")
                 else:
@@ -281,6 +293,7 @@ class PlanControllerNode(BaseNode):
             else:
                 state.stm_steps_history = []
 
+            PlanControllerNode.assert_subtask_type_allowed(plan_controller_output.next_subtask_type)
             if plan_controller_output.next_subtask_type == 'web':
                 return Command(update=state.model_dump(), goto="BrowserPlannerAgent")
             else:

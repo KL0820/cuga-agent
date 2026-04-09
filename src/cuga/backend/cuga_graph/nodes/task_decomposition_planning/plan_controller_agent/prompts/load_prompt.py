@@ -1,6 +1,10 @@
 from typing import List, Literal, Union
 from langchain_core.output_parsers import PydanticOutputParser
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
+
+from cuga.backend.cuga_graph.nodes.task_decomposition_planning.mode_constraints import (
+    validate_subtask_types_for_mode,
+)
 
 
 class PlanControllerOutput(BaseModel):
@@ -39,6 +43,19 @@ class PlanControllerOutput(BaseModel):
                 f"Got next_subtask_type='api' with next_subtask='{self.next_subtask}' and conclude_task='{self.conclude_task}'"
             )
 
+        return self
+
+    @model_validator(mode='after')
+    def validate_next_subtask_type_for_execution_mode(self, info: ValidationInfo):
+        execution_mode = (info.context or {}).get("execution_mode")
+        if execution_mode is None or self.conclude_task:
+            return self
+
+        validate_subtask_types_for_mode(
+            [self.next_subtask_type],
+            execution_mode,
+            context="PlanControllerAgent",
+        )
         return self
 
 

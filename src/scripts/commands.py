@@ -1,6 +1,7 @@
 import os
 import subprocess
 import asyncio
+import sys
 
 from cuga.backend.cuga_graph.nodes.cuga_lite.executors.code_executor import CodeExecutor
 from cuga.backend.cuga_graph.state.agent_state import AgentState
@@ -9,6 +10,11 @@ from cuga.backend.activity_tracker.tracker import ActivityTracker
 from loguru import logger
 
 tracker = ActivityTracker()
+
+
+def _python_executable() -> str:
+    """Return the active interpreter path for child Python processes."""
+    return sys.executable
 
 
 def run_petstore():
@@ -78,7 +84,7 @@ def run_demo():
 
 def run_eval_api():
     """Run the FastAPI server."""
-    subprocess.run(["python", "server/main.py", "--api-mode"])
+    subprocess.run([_python_executable(), "server/main.py", "--api-mode"])
 
 
 def run_digital_sales_mcp():
@@ -177,7 +183,7 @@ def setup_appworld_environment():
     # Install the package
     subprocess.run(["uv", "pip", "install", "."])
     # Note: For experiment reproduction use:
-    subprocess.run(["python", "-m", "appworld.cli", "install"])
+    subprocess.run([_python_executable(), "-m", "appworld.cli", "install"])
 
     # Unpack encrypted code
     subprocess.run(["appworld", "install", "--repo"])
@@ -208,7 +214,7 @@ def setup_appworld_environment_docker():
     # Install the package
     subprocess.run(["uv", "pip", "install", "."])
     # Note: For experiment reproduction use:
-    subprocess.run(["python", "-m", "appworld.cli", "install"])
+    subprocess.run([_python_executable(), "-m", "appworld.cli", "install"])
     #
     # # Unpack encrypted code
     # subprocess.run(["appworld", "install", "--repo"])

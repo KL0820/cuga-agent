@@ -5,10 +5,15 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableLambda
+from pydantic import ValidationError
 
 from cuga.backend.activity_tracker.tracker import ActivityTracker
 from cuga.backend.cuga_graph.nodes.shared.base_agent import BaseAgent
 from cuga.backend.cuga_graph.state.agent_state import AgentState
+from cuga.backend.cuga_graph.nodes.task_decomposition_planning.mode_constraints import (
+    get_allowed_subtask_types,
+    is_invalid_subtask_type_validation_error,
+)
 from cuga.backend.cuga_graph.nodes.task_decomposition_planning.plan_controller_agent.prompts.load_prompt import (
     PlanControllerOutput,
     parser,
@@ -44,6 +49,62 @@ class PlanControllerAgent(BaseAgent):
         )
         result = AIMessage(content=json.dumps(result.model_dump()), name=name)
         return result
+
+    @staticmethod
+    def _build_mode_retry_instructions(
+        base_instructions: str | None,
+        execution_mode: str,
+        correction_feedback: str,
+        previous_invalid_output: str,
+    ) -> str:
+        allowed_subtask_types = ", ".join(sorted(get_allowed_subtask_types(execution_mode)))
+        retry_instructions = (
+            "Execution mode hard contract:\n"
+            f"- Current execution mode: {execution_mode}\n"
+            f"- Allowed next_subtask_type values: {allowed_subtask_types}\n"
+            f"- {correction_feedback}\n"
+            "Previous invalid output:\n"
+            f"{previous_invalid_output}\n"
+            "Regenerate the full JSON. The non-concluded next_subtask_type must respect the execution mode hard contract."
+        )
+        return retry_instructions if not base_instructions else f"{base_instructions}\n\n{retry_instructions}"
+
+    async def _run_with_mode_retry(
+        self,
+        data: dict[str, Any],
+        execution_mode: str,
+        base_instructions: str | None = None,
+    ) -> AIMessage:
+        retry_instructions = base_instructions or ""
+
+        for attempt in range(2):
+            data["instructions"] = retry_instructions
+            result = await self.chain.ainvoke(data)
+
+            try:
+                validated_output = PlanControllerOutput.model_validate_json(
+                    result.content,
+                    context={"execution_mode": execution_mode},
+                )
+            except ValidationError as exc:
+                if attempt == 0 and is_invalid_subtask_type_validation_error(exc):
+                    retry_instructions = self._build_mode_retry_instructions(
+                        base_instructions=base_instructions,
+                        execution_mode=execution_mode,
+                        correction_feedback=str(exc),
+                        previous_invalid_output=result.content,
+                    )
+                    logger.warning(
+                        "PlanControllerAgent produced a disallowed subtask type for mode {}. "
+                        "Retrying once with correction feedback.",
+                        execution_mode,
+                    )
+                    continue
+                raise
+
+            return AIMessage(content=json.dumps(validated_output.model_dump()), name=self.name)
+
+        raise RuntimeError("PlanControllerAgent retry loop exited unexpectedly")
 
     async def run(self, input_variables: AgentState) -> AIMessage:
         logger.info(
@@ -81,13 +142,13 @@ class PlanControllerAgent(BaseAgent):
             if len(data['variables_history']) > 500
             else data['variables_history']
         )
-        data["instructions"] = instructions_manager.get_instructions(self.name)
+        base_instructions = instructions_manager.get_instructions(self.name)
+        data["instructions"] = base_instructions
         # Add API applications list
         data["api_applications_list"] = [
             app.name for app in input_variables.api_intent_relevant_apps or [] if app.type == 'api'
         ]
-        result = await self.chain.ainvoke(data)
-        return result
+        return await self._run_with_mode_retry(data, settings.advanced_features.mode, base_instructions)
 
     @staticmethod
     def create():
